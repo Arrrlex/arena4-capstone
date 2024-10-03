@@ -14,10 +14,12 @@ from transformers import AutoTokenizer
 import numpy as np
 import functools
 import pandas as pd
-
+import dotenv
 from arena.plotly_utils import imshow
 
 project_root = Path(__file__).parent.parent.parent
+
+
 
 # %%
 API_TOKEN = open(project_root / "token.txt").read()
@@ -37,6 +39,7 @@ gemma = LanguageModel("google/gemma-2-9b-it", device_map=device, token=API_TOKEN
 
 project_root = Path(__file__).parent.parent.parent
 
+dotenv.load_dotenv(project_root / ".." / ".env")
 
 def load_df(filename):
     with open(project_root / "datasets" / filename) as f:
@@ -66,7 +69,10 @@ def vectorizable(func):
     @functools.wraps(func)
     def wrapper(first_arg, *args, **kwargs):
         if isinstance(first_arg, pd.Series):
-            if kwargs.get("as_tensor", False):
+            as_tensor = kwargs.get("as_tensor", False)
+            if as_tensor:
+                del kwargs["as_tensor"]
+            if as_tensor:
                 return t.stack(
                     list(first_arg.apply(lambda x: func(x, *args, **kwargs))), dim=0
                 )
@@ -180,6 +186,49 @@ def continue_text(
     return complete_string
 
 
-def map_with(f, a:pd.Series, df: pd.DataFrame):
-    
+# def map_with(f, a:pd.Series, df: pd.DataFrame):
+
+
+def batch_continue_text(
+    prompts,
+    model,
+    intervention: None | tuple[int, t.Tensor] = None,
+    max_new_tokens=50,
+    skip_special_tokens=True,
+):
+    with model.generate(max_new_tokens=50) as generator:
+        with generator.invoke(list(prompts)):
+            if intervention is not None:
+                layer, vector = intervention
+                model.model.layers[layer].output[0][:, -1, :] += vector
+            for n in range(50):
+                model.next()
+            all_tokens = model.generator.output.save()
+
+    complete_strings = model.tokenizer.batch_decode(
+        all_tokens.value, skip_special_tokens=False
+    )
+
+    processed_completions = []
+    # Find the first occurrence of the original prompt
+    for prompt, complete_string in zip(prompts, complete_strings):
+        prompt_index = complete_string.find(prompt)
+        assert prompt_index != -1, "Original prompt not found in the completion"
+
+        # Ensure it's the only occurrence
+        assert (
+            complete_string.count(prompt) == 1
+        ), "Multiple occurrences of the original prompt found"
+
+        # Keep only the text coming after the prompt
+        complete_string = complete_string[prompt_index + len(prompt) :]
+
+        if skip_special_tokens:
+            # Re-encode and decode the completion to remove special tokens
+            tokens = model.tokenizer.encode(complete_string)
+            complete_string = model.tokenizer.decode(tokens, skip_special_tokens=True)
+
+        processed_completions.append(complete_string)
+
+    return processed_completions
 
