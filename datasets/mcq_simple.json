@@ -1,152 +1,152 @@
 {"data": [
     {
       "question": "What color is the sky on a sunny day?",
-      "correct answer": "Blue",
-      "incorrect answer": "Green"
+      "correct_answer": "Blue",
+      "incorrect_answer": "Green"
     },
     {
       "question": "How many legs does a cat have?",
-      "correct answer": "4",
-      "incorrect answer": "6"
+      "correct_answer": "4",
+      "incorrect_answer": "6"
     },
     {
       "question": "What do cows drink?",
-      "correct answer": "Water",
-      "incorrect answer": "Milk"
+      "correct_answer": "Water",
+      "incorrect_answer": "Milk"
     },
     {
       "question": "What color are bananas?",
-      "correct answer": "Yellow",
-      "incorrect answer": "Red"
+      "correct_answer": "Yellow",
+      "incorrect_answer": "Red"
     },
     {
       "question": "What do you use to brush your teeth?",
-      "correct answer": "Toothbrush",
-      "incorrect answer": "Fork"
+      "correct_answer": "Toothbrush",
+      "incorrect_answer": "Fork"
     },
     {
       "question": "What animal says 'moo'?",
-      "correct answer": "Cow",
-      "incorrect answer": "Dog"
+      "correct_answer": "Cow",
+      "incorrect_answer": "Dog"
     },
     {
       "question": "How many fingers do you have on one hand?",
-      "correct answer": "5",
-      "incorrect answer": "3"
+      "correct_answer": "5",
+      "incorrect_answer": "3"
     },
     {
       "question": "What do you wear on your feet?",
-      "correct answer": "Shoes",
-      "incorrect answer": "Hat"
+      "correct_answer": "Shoes",
+      "incorrect_answer": "Hat"
     },
     {
       "question": "What color is grass?",
-      "correct answer": "Green",
-      "incorrect answer": "Purple"
+      "correct_answer": "Green",
+      "incorrect_answer": "Purple"
     },
     {
       "question": "What do fish swim in?",
-      "correct answer": "Water",
-      "incorrect answer": "Sand"
+      "correct_answer": "Water",
+      "incorrect_answer": "Sand"
     },
     {
       "question": "What shape is a ball?",
-      "correct answer": "Round",
-      "incorrect answer": "Square"
+      "correct_answer": "Round",
+      "incorrect_answer": "Square"
     },
     {
       "question": "What color is snow?",
-      "correct answer": "White",
-      "incorrect answer": "Pink"
+      "correct_answer": "White",
+      "incorrect_answer": "Pink"
     },
     {
       "question": "What do birds have that help them fly?",
-      "correct answer": "Wings",
-      "incorrect answer": "Fins"
+      "correct_answer": "Wings",
+      "incorrect_answer": "Fins"
     },
     {
       "question": "What do you use to cut paper?",
-      "correct answer": "Scissors",
-      "incorrect answer": "Spoon"
+      "correct_answer": "Scissors",
+      "incorrect_answer": "Spoon"
     },
     {
       "question": "What fruit is red and grows on a tree?",
-      "correct answer": "Apple",
-      "incorrect answer": "Banana"
+      "correct_answer": "Apple",
+      "incorrect_answer": "Banana"
     },
     {
       "question": "What do you sleep in?",
-      "correct answer": "Bed",
-      "incorrect answer": "Bathtub"
+      "correct_answer": "Bed",
+      "incorrect_answer": "Bathtub"
     },
     {
       "question": "What animal barks?",
-      "correct answer": "Dog",
-      "incorrect answer": "Cat"
+      "correct_answer": "Dog",
+      "incorrect_answer": "Cat"
     },
     {
       "question": "What do you use to write?",
-      "correct answer": "Pencil",
-      "incorrect answer": "Shoe"
+      "correct_answer": "Pencil",
+      "incorrect_answer": "Shoe"
     },
     {
       "question": "What do you drink out of?",
-      "correct answer": "Cup",
-      "incorrect answer": "Plate"
+      "correct_answer": "Cup",
+      "incorrect_answer": "Plate"
     },
     {
       "question": "What color is the sun?",
-      "correct answer": "Yellow",
-      "incorrect answer": "Blue"
+      "correct_answer": "Yellow",
+      "incorrect_answer": "Blue"
     },
     {
       "question": "What do you use to eat soup?",
-      "correct answer": "Spoon",
-      "incorrect answer": "Fork"
+      "correct_answer": "Spoon",
+      "incorrect_answer": "Fork"
     },
     {
       "question": "What animal says 'meow'?",
-      "correct answer": "Cat",
-      "incorrect answer": "Pig"
+      "correct_answer": "Cat",
+      "incorrect_answer": "Pig"
     },
     {
       "question": "What do you wear when it's cold outside?",
-      "correct answer": "Coat",
-      "incorrect answer": "Swimsuit"
+      "correct_answer": "Coat",
+      "incorrect_answer": "Swimsuit"
     },
     {
       "question": "What do you use to dry yourself after a bath?",
-      "correct answer": "Towel",
-      "incorrect answer": "Blanket"
+      "correct_answer": "Towel",
+      "incorrect_answer": "Blanket"
     },
     {
       "question": "What do you sit on?",
-      "correct answer": "Chair",
-      "incorrect answer": "Table"
+      "correct_answer": "Chair",
+      "incorrect_answer": "Table"
     },
     {
       "question": "What do you use to call someone far away?",
-      "correct answer": "Phone",
-      "incorrect answer": "Book"
+      "correct_answer": "Phone",
+      "incorrect_answer": "Book"
     },
     {
       "question": "What do you wear on your head?",
-      "correct answer": "Hat",
-      "incorrect answer": "Gloves"
+      "correct_answer": "Hat",
+      "incorrect_answer": "Gloves"
     },
     {
       "question": "What do you use to see things far away?",
-      "correct answer": "Eyes",
-      "incorrect answer": "Ears"
+      "correct_answer": "Eyes",
+      "incorrect_answer": "Ears"
     },
     {
       "question": "What do you ride on to go fast?",
-      "correct answer": "Bicycle",
-      "incorrect answer": "Couch"
+      "correct_answer": "Bicycle",
+      "incorrect_answer": "Couch"
     },
     {
       "question": "What do you use to open a door?",
-      "correct answer": "Key",
-      "incorrect answer": "Pillow"
+      "correct_answer": "Key",
+      "incorrect_answer": "Pillow"
     }
   ]}
