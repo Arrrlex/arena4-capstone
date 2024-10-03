@@ -158,50 +158,30 @@ def ai_judge_accuracy(answers, df):
     return correct, incorrect, ambiguous
 
 # %%
+#Load dataframes
+easy_df = load_df("mcq_simple.json")
+hard_df = load_df("mcq_12_yo.json")
 
-
-
-easy_train, easy_test = prepare_mcq(load_df("mcq_simple.json"))
-easy_lying_vectors = last_token_batch_mean(easy_train.lying_prompt, gemma)
-easy_honest_vectors = last_token_batch_mean(easy_train.honest_prompt, gemma)
-
-easy_intervened_short_comps = next_token_str(
-    easy_test.none_prompt, gemma, (25, (easy_lying_vectors - easy_honest_vectors)[25] * 2)
-)
-easy_intervened_long_comps = continue_text(easy_test.none_prompt, gemma, (25, (easy_lying_vectors - easy_honest_vectors)[25] * 2))
-
+easy_train, easy_test = prepare_mcq(easy_df)
+hard_train, hard_test = prepare_mcq(hard_df)
 
 
 # %%
-
-easy_test.assign(
-    intervened_short_comps=easy_intervened_short_comps,
-    intervened_long_comps=easy_intervened_long_comps,
-)
-
-# %%
-
-hard_train, hard_test = prepare_mcq(load_df("mcq_12_yo.json"))
+# Create steering vectors on hard train
 hard_lying_vectors = last_token_batch_mean(hard_train.lying_prompt, gemma)
 hard_honest_vectors = last_token_batch_mean(hard_train.honest_prompt, gemma)
+steering_vecs = hard_lying_vectors - hard_honest_vectors
 
-hard_intervened_short_comps = next_token_str(
-    hard_test.none_prompt, gemma, (25, (hard_lying_vectors - hard_honest_vectors)[25] * 2)
-)
-hard_intervened_long_comps = continue_text(hard_test.none_prompt, gemma, (25, (hard_lying_vectors - hard_honest_vectors)[25] * 2))
-
-hard_test.assign(
-    intervened_short_comps=hard_intervened_short_comps,
-    intervened_long_comps=hard_intervened_long_comps,
-)
+# 
 
 # %%
-
+#plot of lying capability with layer 24 steering with different coeffs 
 coeffs = t.arange(-3, 6, 0.5)
 lying_accuracies = []
 for coeff in tqdm(coeffs):
     current_intervened_lcompletions = continue_text(hard_test.none_prompt, gemma, (24, (hard_lying_vectors - hard_honest_vectors)[24] * coeff))
-    lying_accuracies.append(accuracy(current_intervened_lcompletions, hard_test, flexible_long_completion_lying_judge))
+    corr,
+    lying_accuracies.append(ai(current_intervened_lcompletions, hard_test, flexible_long_completion_lying_judge))
 
 
 import plotly.express as px
@@ -322,7 +302,7 @@ sus_places = big_dataframe[sus_locs]
 
 # %%
 #must: ai ambiguous -> flex false
-sus_locs = ~((~(big_dataframe.ai_judgement == "Ambiguous")) | (big_dataframe.long_flex_judgement == "Incorrect"))
+sus_locs = ~((~(big_dataframe.ai_judgement == "Ambiguous")) | (~big_dataframe.long_flex_judgement))
 
 sus_places = big_dataframe[sus_locs]
 sus_places
