@@ -17,6 +17,11 @@ import pandas as pd
 import dotenv
 from arena.plotly_utils import imshow
 
+from pydantic import BaseModel, Field
+from openai import OpenAI
+import functools
+from concurrent.futures import ThreadPoolExecutor
+
 project_root = Path(__file__).parent.parent.parent
 
 
@@ -41,15 +46,20 @@ project_root = Path(__file__).parent.parent.parent
 
 dotenv.load_dotenv(project_root / ".." / ".env")
 
-def load_df(filename):
+def load_df(filename, shuffle = True, random_state=42):
     with open(project_root / "datasets" / filename) as f:
         data = json.load(f)["data"]
-    return pd.DataFrame(data)
+    result_df = pd.DataFrame(data)
+    if shuffle:
+        result_df = result_df.sample(frac=1, random_state=random_state).reset_index(drop=True)
+    return result_df
+
 
 
 def map_with(f, a: pd.Series, df: pd.DataFrame):
+    assert a.index.equals(df.index)
     assert len(a) == len(df)
-    return pd.Series([f(a_i, df.iloc[i]) for i, a_i in a.iteritems()])
+    return pd.Series([f(a_i, df.iloc[i]) for i, a_i in enumerate(a)], index=a.index)
 
 
 def combine(*l):
@@ -65,18 +75,36 @@ def combine(*l):
     return ans
 
 
+
+
+
+
 def vectorizable(func):
     @functools.wraps(func)
     def wrapper(first_arg, *args, **kwargs):
-        if isinstance(first_arg, pd.Series):
-            as_tensor = kwargs.get("as_tensor", False)
+        if isinstance(first_arg, pd.Series) or isinstance(first_arg, list):
+            first_arg = pd.Series(first_arg)
+
+            as_tensor = kwargs.pop("as_tensor", False)
+            threaded = kwargs.pop("threaded", False)
+            
+            # Function to be executed in parallel
+            def apply_func(x):
+                return func(x, *args, **kwargs)
+
+            # Use ThreadPoolExecutor to map the function in parallel
+            if threaded:
+                with ThreadPoolExecutor() as executor:
+                    first_arg.iloc[:] = list(executor.map(apply_func, first_arg))
+                    results = first_arg
+
+            else:
+                results = first_arg.map(apply_func)
+            
             if as_tensor:
-                del kwargs["as_tensor"]
-            if as_tensor:
-                return t.stack(
-                    list(first_arg.apply(lambda x: func(x, *args, **kwargs))), dim=0
-                )
-            return first_arg.apply(lambda x: func(x, *args, **kwargs))
+                return t.stack(list(results), dim=0)
+            else:
+                return results
 
         else:
             return func(first_arg, *args, **kwargs)
@@ -232,3 +260,21 @@ def batch_continue_text(
 
     return processed_completions
 
+@vectorizable
+def openai_api(prompt, return_type, model="gpt-4o-mini"):
+    from pydantic import BaseModel
+    from openai import OpenAI
+
+    client = OpenAI()
+
+
+    completion = client.beta.chat.completions.parse(
+        model="gpt-4o-2024-08-06",
+        messages=[
+            {"role": "user", "content": prompt},
+        ],
+        response_format=return_type,
+    )
+
+    value = completion.choices[0].message.parsed
+    return value
