@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 import torch as t
 from pydantic_settings import BaseSettings
+import nnsight
 
 from openai import OpenAI
 
@@ -18,6 +19,7 @@ class Settings(BaseSettings):
     HF_API_TOKEN: str
     NNSIGHT_API_TOKEN: str = None
     OPENAI_API_TOKEN: str
+    REMOTE_MODE: bool = False
 
     class Config:
         env_file = str(project_root / ".env")
@@ -28,7 +30,8 @@ settings = Settings()
 
 device = t.device("cuda" if t.cuda.is_available() else "cpu")
 
-REMOTE_MODE = settings.NNSIGHT_API_TOKEN is not None
+if settings.REMOTE_MODE:
+    nnsight.CONFIG.set_default_api_key(settings.NNSIGHT_API_TOKEN)
 
 # %%
 
@@ -110,7 +113,7 @@ def vectorizable(func):
 @vectorizable
 @t.inference_mode()
 def next_logits(prompt: str, model, intervention: None | tuple[int, t.Tensor] = None):
-    with model.trace(prompt, remote=REMOTE_MODE):
+    with model.trace(prompt, remote=settings.REMOTE_MODE):
         if intervention is not None:
             layer, steering = intervention
             model.model.layers[layer].output[0][:, -1, :] += steering
@@ -137,7 +140,7 @@ def next_token_str(
 @t.inference_mode()
 def last_token_residual_stream(prompt: str, model):
     saves = []
-    with model.trace(prompt, remote=REMOTE_MODE):
+    with model.trace(prompt, remote=settings.REMOTE_MODE):
         for _, layer in enumerate(model.model.layers):
             saves.append(layer.output[0][:, -1, :].save())
 
@@ -178,7 +181,7 @@ def continue_text(
     skip_special_tokens=True,
 ):
     with model.generate(max_new_tokens=max_new_tokens) as generator:
-        with generator.invoke(prompt, remote=REMOTE_MODE):
+        with generator.invoke(prompt, remote=settings.REMOTE_MODE):
             if intervention is not None:
                 layer, vector = intervention
                 model.model.layers[layer].output[0][:, -1, :] += vector
@@ -217,7 +220,7 @@ def batch_continue_text(
     skip_special_tokens=True,
 ):
     with model.generate(max_new_tokens=max_new_tokens) as generator:
-        with generator.invoke(list(prompts), remote=REMOTE_MODE):
+        with generator.invoke(list(prompts), remote=settings.REMOTE_MODE):
             if intervention is not None:
                 layer, vector = intervention
                 model.model.layers[layer].output[0][:, -1, :] += vector

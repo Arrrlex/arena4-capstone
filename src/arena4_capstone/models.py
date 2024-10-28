@@ -9,7 +9,7 @@ if device.type == "cuda":
     t.cuda.empty_cache()
 
 gemma_tokenizer = AutoTokenizer.from_pretrained(
-    "google/gemma-2-9b-it", use_auth_token=settings.HF_API_TOKEN
+    "google/gemma-2-9b-it", token=settings.HF_API_TOKEN
 )
 
 if REMOTE_MODE:
