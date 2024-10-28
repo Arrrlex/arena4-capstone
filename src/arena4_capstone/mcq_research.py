@@ -1,16 +1,19 @@
-# %%
-from arena4_capstone.util import load_df, map_with, combine, gemma, tokenizer, device, project_root
+#%%
+
+from arena4_capstone.util import load_df, map_with, combine
+from arena4_capstone.models import gemma
 import itertools
 import numpy as np
 import pandas as pd
 import torch as t
 from tqdm import tqdm
 
-# os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
-!export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+#%%
+
+# Set CUDA allocation config (only if running on GPU locally)
+# !export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
 
 rng = np.random.RandomState(42)
-
 
 
 task_lying_prefix = (

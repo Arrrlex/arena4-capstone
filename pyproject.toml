@@ -10,7 +10,9 @@ dependencies = [
     # Pinned to numpy<2 due to compatibility issues with transformers library
     # TODO: Remove this constraint once transformers adds numpy 2.0 support
     "numpy<2.0.0",
+    "openai>=1.52.2",
     "pandas>=2.2.3",
+    "pydantic-settings>=2.6.0",
     "python-dotenv>=1.0.1",
     "torch<2.3.0",
     "tqdm>=4.66.5",

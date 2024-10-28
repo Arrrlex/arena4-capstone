@@ -1,113 +1,108 @@
 # %%
-import random
-from typing import Literal
-from textwrap import dedent
+from concurrent.futures import ThreadPoolExecutor
+import functools
 import json
 from pathlib import Path
 import pandas as pd
-import gc
-import json
-from nnsight import LanguageModel
 import torch as t
-from tqdm import tqdm
-from transformers import AutoTokenizer
-import numpy as np
-import functools
-import pandas as pd
-import dotenv
-from arena.plotly_utils import imshow
+from pydantic_settings import BaseSettings
 
-from pydantic import BaseModel, Field
 from openai import OpenAI
-import functools
-from concurrent.futures import ThreadPoolExecutor
 
-project_root = Path(__file__).parent.parent.parent
-
-
+project_root = Path(__file__).parents[2]
 
 # %%
-API_TOKEN = open(project_root / "token.txt").read()
 
-t.cuda.empty_cache()
+
+class Settings(BaseSettings):
+    HF_API_TOKEN: str
+    NNSIGHT_API_TOKEN: str = None
+    OPENAI_API_TOKEN: str
+
+    class Config:
+        env_file = str(project_root / ".env")
+        env_file_encoding = "utf-8"
+
+
+settings = Settings()
 
 device = t.device("cuda" if t.cuda.is_available() else "cpu")
 
-tokenizer = AutoTokenizer.from_pretrained(
-    "google/gemma-2-9b-it", use_auth_token=API_TOKEN
-)
-
-gemma = LanguageModel("google/gemma-2-9b-it", device_map=device, token=API_TOKEN)
+REMOTE_MODE = settings.NNSIGHT_API_TOKEN is not None
 
 # %%
 
 
-project_root = Path(__file__).parent.parent.parent
+def load_df(filename, shuffle: bool = True, random_state: int = 42):
+    """
+    Load a dataset from a json file.
 
-dotenv.load_dotenv(project_root / ".." / ".env")
-
-def load_df(filename, shuffle = True, random_state=42):
+    Args:
+        filename (str): The name of the file to load.
+        shuffle (bool, optional): Whether to shuffle the data. Defaults to True.
+        random_state (int, optional): The random state to use for shuffling. Defaults to 42.
+    """
     with open(project_root / "datasets" / filename) as f:
         data = json.load(f)["data"]
     result_df = pd.DataFrame(data)
     if shuffle:
-        result_df = result_df.sample(frac=1, random_state=random_state).reset_index(drop=True)
+        result_df = result_df.sample(frac=1, random_state=random_state).reset_index(
+            drop=True
+        )
     return result_df
 
 
+def map_with(f, a: pd.Series, df: pd.DataFrame) -> pd.Series:
+    """
+    Map a function over a series and a dataframe row-wise.
 
-def map_with(f, a: pd.Series, df: pd.DataFrame):
+    Returns a series `out` where `out[i] = f(a[i], df.iloc[i])` for all `i`.
+    """
     assert a.index.equals(df.index)
     assert len(a) == len(df)
     return pd.Series([f(a_i, df.iloc[i]) for i, a_i in enumerate(a)], index=a.index)
 
 
-def combine(*l):
-    sot = "<start_of_turn>"
-    eot = "<end_of_turn>"
+def combine(*lines: str) -> str:
+    """
+    Combine a list of strings into a single string with a turn delimiter.
+    """
+    start = "<start_of_turn>user"
+    middle = "\n".join(lines)
+    end = "<end_of_turn>\n<start_of_turn>model\n"
 
-    ans = f"{sot}user\n"
-    for elem in l:
-        ans = ans + elem + "\n"
-
-    ans = ans + f"{eot}\n{sot}model\n"
-
-    return ans
-
-
-
-
+    return "\n".join([start, middle, end])
 
 
 def vectorizable(func):
+    """
+    Decorator to allow a function to be vectorized over a series or list.
+    """
+
     @functools.wraps(func)
-    def wrapper(first_arg, *args, **kwargs):
-        if isinstance(first_arg, pd.Series) or isinstance(first_arg, list):
-            first_arg = pd.Series(first_arg)
+    def wrapper(first_arg, *args, as_tensor=False, threaded=False, **kwargs):
+        if not isinstance(first_arg, (pd.Series, list)):
+            return func(first_arg, *args, **kwargs)
 
-            as_tensor = kwargs.pop("as_tensor", False)
-            threaded = kwargs.pop("threaded", False)
-            
-            # Function to be executed in parallel
-            def apply_func(x):
-                return func(x, *args, **kwargs)
+        first_arg = pd.Series(first_arg)
 
-            # Use ThreadPoolExecutor to map the function in parallel
-            if threaded:
-                with ThreadPoolExecutor() as executor:
-                    first_arg.iloc[:] = list(executor.map(apply_func, first_arg))
-                    results = first_arg
+        # Function to be executed in parallel
+        def apply_func(x):
+            return func(x, *args, **kwargs)
 
-            else:
-                results = first_arg.map(apply_func)
-            
-            if as_tensor:
-                return t.stack(list(results), dim=0)
-            else:
-                return results
+        # Use ThreadPoolExecutor to map the function in parallel
+        if threaded:
+            with ThreadPoolExecutor() as executor:
+                first_arg.iloc[:] = list(executor.map(apply_func, first_arg))
+                results = first_arg
 
         else:
-            return func(first_arg, *args, **kwargs)
+            results = first_arg.map(apply_func)
+
+        if as_tensor:
+            return t.stack(list(results), dim=0)
+        else:
+            return results
 
     return wrapper
 
@@ -115,7 +110,7 @@ def vectorizable(func):
 @vectorizable
 @t.inference_mode()
 def next_logits(prompt: str, model, intervention: None | tuple[int, t.Tensor] = None):
-    with model.trace(prompt) as tracer:
+    with model.trace(prompt, remote=REMOTE_MODE):
         if intervention is not None:
             layer, steering = intervention
             model.model.layers[layer].output[0][:, -1, :] += steering
@@ -142,7 +137,7 @@ def next_token_str(
 @t.inference_mode()
 def last_token_residual_stream(prompt: str, model):
     saves = []
-    with model.trace(prompt):
+    with model.trace(prompt, remote=REMOTE_MODE):
         for _, layer in enumerate(model.model.layers):
             saves.append(layer.output[0][:, -1, :].save())
 
@@ -182,12 +177,12 @@ def continue_text(
     max_new_tokens=50,
     skip_special_tokens=True,
 ):
-    with model.generate(max_new_tokens=50) as generator:
-        with generator.invoke(prompt):
+    with model.generate(max_new_tokens=max_new_tokens) as generator:
+        with generator.invoke(prompt, remote=REMOTE_MODE):
             if intervention is not None:
                 layer, vector = intervention
                 model.model.layers[layer].output[0][:, -1, :] += vector
-            for n in range(50):
+            for _ in range(max_new_tokens):
                 model.next()
             all_tokens = model.generator.output.save()
 
@@ -214,9 +209,6 @@ def continue_text(
     return complete_string
 
 
-# def map_with(f, a:pd.Series, df: pd.DataFrame):
-
-
 def batch_continue_text(
     prompts,
     model,
@@ -224,12 +216,12 @@ def batch_continue_text(
     max_new_tokens=50,
     skip_special_tokens=True,
 ):
-    with model.generate(max_new_tokens=50) as generator:
-        with generator.invoke(list(prompts)):
+    with model.generate(max_new_tokens=max_new_tokens) as generator:
+        with generator.invoke(list(prompts), remote=REMOTE_MODE):
             if intervention is not None:
                 layer, vector = intervention
                 model.model.layers[layer].output[0][:, -1, :] += vector
-            for n in range(50):
+            for _ in range(max_new_tokens):
                 model.next()
             all_tokens = model.generator.output.save()
 
@@ -260,15 +252,13 @@ def batch_continue_text(
 
     return processed_completions
 
+
+openai_client = OpenAI(api_key=settings.OPENAI_API_TOKEN)
+
+
 @vectorizable
 def openai_api(prompt, return_type, model="gpt-4o-mini"):
-    from pydantic import BaseModel
-    from openai import OpenAI
-
-    client = OpenAI()
-
-
-    completion = client.beta.chat.completions.parse(
+    completion = openai_client.beta.chat.completions.parse(
         model="gpt-4o-2024-08-06",
         messages=[
             {"role": "user", "content": prompt},
