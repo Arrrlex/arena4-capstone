@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 #%%
 
 # Set CUDA allocation config (only if running on GPU locally)
-# !export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
+!export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
 
 rng = np.random.RandomState(42)
 
