@@ -5,8 +5,11 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "ipykernel>=6.29.5",
     "nnsight>=0.3.3",
-    "numpy>=2.1.2",
+    # Pinned to numpy<2 due to compatibility issues with transformers library
+    # TODO: Remove this constraint once transformers adds numpy 2.0 support
+    "numpy<2.0.0",
     "pandas>=2.2.3",
     "python-dotenv>=1.0.1",
     "torch<2.3.0",
