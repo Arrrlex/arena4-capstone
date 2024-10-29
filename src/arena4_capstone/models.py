@@ -17,5 +17,5 @@ if device.type == "cuda":
 # )
 
 gemma = LanguageModel(
-    "google/gemma-2-9b-it", device_map=device, token=settings.HF_API_TOKEN
+    "google/gemma-2-2b-it", device_map=device, token=settings.HF_API_TOKEN
 )
