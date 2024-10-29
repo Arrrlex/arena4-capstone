@@ -1,7 +1,7 @@
 #%%
 
 import arena4_capstone.util as util
-import arena4_capstone.models as models
+from arena4_capstone.models import gemma
 import itertools
 import numpy as np
 import pandas as pd
@@ -11,12 +11,6 @@ from pydantic import BaseModel, Field
 from typing import Literal
 
 #%%
-
-from nnsight import LanguageModel, CONFIG
-
-CONFIG.set_default_api_key(util.settings.NNSIGHT_API_TOKEN)
-
-gemma = LanguageModel("google/gemma-2-9b-it", token=util.settings.HF_API_TOKEN)
 
 with gemma.trace("<start_of_turn>user\nHello\n<end_of_turn>\n<start_of_turn>model\n"):
     logits = gemma.lm_head.output[..., -1, :].save()
@@ -98,8 +92,8 @@ def prepare_mcq(df, option_names: list[str] = ["A", "B"]):
 
 
 
-eos_token = str(models.gemma.tokenizer.eos_token)
-bos_token = str(models.gemma.tokenizer.bos_token)
+eos_token = str(gemma.tokenizer.eos_token)
+bos_token = str(gemma.tokenizer.bos_token)
 end_of_turn_token = "<end_of_turn>"
 
 def distill_long_completion(text, c):
@@ -171,7 +165,7 @@ def judgements(answers, df):
     
     j_prompts = judgement_prompts(answers, df)
 
-    judgements = models.openai_api(j_prompts, MultipleChoiceQuestionJudgement, threaded=True)
+    judgements = util.openai_api(j_prompts, MultipleChoiceQuestionJudgement, threaded=True)
 
     return judgements.map(lambda jud: jud.judgement)
 
@@ -207,7 +201,7 @@ steering_vecs = hard_lying_vectors - hard_honest_vectors
 coeffs = t.arange(-3, 6, 0.5)
 lying_accuracies = []
 for coeff in tqdm(coeffs):
-    current_intervened_lcompletions = continue_text(hard_test.none_prompt, models.gemma, (24, (hard_lying_vectors - hard_honest_vectors)[24] * coeff))
+    current_intervened_lcompletions = util.continue_text(hard_test.none_prompt, gemma, (24, (hard_lying_vectors - hard_honest_vectors)[24] * coeff))
     corr,
     lying_accuracies.append(ai(current_intervened_lcompletions, hard_test, flexible_long_completion_lying_judge))
 
