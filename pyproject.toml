@@ -7,6 +7,7 @@ requires-python = ">=3.11"
 dependencies = [
     "ipykernel>=6.29.5",
     "ipywidgets>=8.1.5",
+    "matplotlib>=3.9.2",
     "nnsight>=0.3.3",
     # Pinned to numpy<2 due to compatibility issues with transformers library
     # TODO: Remove this constraint once transformers adds numpy 2.0 support
