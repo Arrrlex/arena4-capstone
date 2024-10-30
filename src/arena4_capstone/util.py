@@ -138,9 +138,12 @@ def next_token_str(
 
 @vectorizable
 @t.inference_mode()
-def last_token_residual_stream(prompt: str, model):
+def last_token_residual_stream(prompt: str, model, intervention: None | tuple[int, t.Tensor] = None):
     saves = []
     with model.trace(prompt, remote=settings.REMOTE_MODE):
+        if intervention is not None:
+            layer, steering = intervention
+            model.model.layers[layer].output[0][:, -1, :] += steering
         for _, layer in enumerate(model.model.layers):
             saves.append(layer.output[0][:, -1, :].save())
 

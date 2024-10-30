@@ -17,6 +17,7 @@ dependencies = [
     "plotly>=5.24.1",
     "pydantic-settings>=2.6.0",
     "python-dotenv>=1.0.1",
+    "seaborn>=0.13.2",
     "torch<2.3.0",
     "tqdm>=4.66.5",
     "transformers>=4.46.0",
