@@ -222,8 +222,8 @@ def batch_continue_text(
     max_new_tokens=50,
     skip_special_tokens=True,
 ):
-    with model.generate(max_new_tokens=max_new_tokens) as generator:
-        with generator.invoke(list(prompts), remote=settings.REMOTE_MODE):
+    with model.generate(max_new_tokens=max_new_tokens, remote=settings.REMOTE_MODE) as generator:
+        with generator.invoke(list(prompts)):
             if intervention is not None:
                 layer, vector = intervention
                 model.model.layers[layer].output[0][:, -1, :] += vector
