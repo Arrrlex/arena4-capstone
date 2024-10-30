@@ -1,4 +1,9 @@
-**/plots/*
+**/plots/*.png 
+**/plots/*.pdf 
+**/plots/*.svg
+**/plots/*.html 
+**/plots/*.jpg
+
 token.txt
 # Byte-compiled / optimized / DLL files
 __pycache__/

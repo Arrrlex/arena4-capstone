@@ -11,6 +11,7 @@ import nnsight
 from openai import OpenAI
 
 project_root = Path(__file__).parents[2]
+plots_dir = project_root / "plots"
 
 # %%
 
