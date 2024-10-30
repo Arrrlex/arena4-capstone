@@ -12,6 +12,9 @@ hf.login(token=settings.HF_API_TOKEN)
 if device.type == "cuda":
     t.cuda.empty_cache()
 
+# It was necessary at some point to initialize the tokenizer manually, 
+# but now it doesn't seem to be necessary.
+
 # gemma_tokenizer = AutoTokenizer.from_pretrained(
 #     "google/gemma-2-9b-it", token=settings.HF_API_TOKEN
 # )
