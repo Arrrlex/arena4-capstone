@@ -14,3 +14,4 @@ Full docs coming soon!
 6. Get api keys and put them in `.env` inside `arena4-capstone`
 7. Install dependencies: `cd arena4-capstone && git switch use-uv && uv sync`
 8. Install python and jupyter vscode extensions
+9. Configure git
