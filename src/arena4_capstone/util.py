@@ -139,7 +139,9 @@ def next_token_str(
 
 @vectorizable
 @t.inference_mode()
-def last_token_residual_stream(prompt: str, model, intervention: None | tuple[int, t.Tensor] = None):
+def last_token_residual_stream(
+    prompt: str, model, intervention: None | tuple[int, t.Tensor] = None
+):
     saves = []
     with model.trace(prompt, remote=settings.REMOTE_MODE):
         if intervention is not None:
@@ -184,7 +186,9 @@ def continue_text(
     max_new_tokens=50,
     skip_special_tokens=True,
 ):
-    with model.generate(max_new_tokens=max_new_tokens, remote=settings.REMOTE_MODE) as generator:
+    with model.generate(
+        max_new_tokens=max_new_tokens, remote=settings.REMOTE_MODE
+    ) as generator:
         with generator.invoke(prompt):
             if intervention is not None:
                 layer, vector = intervention
@@ -223,7 +227,9 @@ def batch_continue_text(
     max_new_tokens=50,
     skip_special_tokens=True,
 ):
-    with model.generate(max_new_tokens=max_new_tokens, remote=settings.REMOTE_MODE) as generator:
+    with model.generate(
+        max_new_tokens=max_new_tokens, remote=settings.REMOTE_MODE
+    ) as generator:
         with generator.invoke(list(prompts)):
             if intervention is not None:
                 layer, vector = intervention
@@ -275,3 +281,11 @@ def openai_api(prompt, return_type, model="gpt-4o-mini"):
 
     value = completion.choices[0].message.parsed
     return value
+
+
+def train_test_split(df, train_fraction=0.75):
+    train_size = int(len(df) * train_fraction)
+    train_set = df.iloc[:train_size].reset_index(drop=True)
+    test_set = df.iloc[train_size:].reset_index(drop=True)
+
+    return train_set, test_set
