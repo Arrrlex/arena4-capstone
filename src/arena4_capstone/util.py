@@ -19,7 +19,7 @@ plots_dir = project_root / "plots"
 class Settings(BaseSettings):
     HF_API_TOKEN: str
     NNSIGHT_API_TOKEN: str = None
-    OPENAI_API_TOKEN: str
+    OPENAI_API_TOKEN: str = None
     REMOTE_MODE: bool = False
 
     class Config:
