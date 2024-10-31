@@ -289,3 +289,7 @@ def train_test_split(df, train_fraction=0.75):
     test_set = df.iloc[train_size:].reset_index(drop=True)
 
     return train_set, test_set
+
+
+def append(df: pd.DataFrame, row: dict) -> pd.DataFrame:
+    return pd.concat([df, pd.DataFrame([row])], ignore_index=True)
