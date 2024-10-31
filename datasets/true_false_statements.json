@@ -416,6 +416,246 @@
     {
       "statement": "Pizza grows on pizza trees.",
       "truth_value": false
+    },
+    {
+      "statement": "The Sun rises in the east.",
+      "truth_value": true
+    },
+    {
+      "statement": "Fish can breathe out of water.",
+      "truth_value": false
+    },
+    {
+      "statement": "There are 7 days in a week.",
+      "truth_value": true
+    },
+    {
+      "statement": "Cats can bark.",
+      "truth_value": false
+    },
+    {
+      "statement": "Ice is frozen water.",
+      "truth_value": true
+    },
+    {
+      "statement": "The Earth is flat.",
+      "truth_value": false
+    },
+    {
+      "statement": "Apples grow on trees.",
+      "truth_value": true
+    },
+    {
+      "statement": "Bikes have four wheels.",
+      "truth_value": false
+    },
+    {
+      "statement": "Birds lay eggs.",
+      "truth_value": true
+    },
+    {
+      "statement": "The sky is always blue.",
+      "truth_value": false
+    },
+    {
+      "statement": "Humans have two eyes.",
+      "truth_value": true
+    },
+    {
+      "statement": "Carrots are meat.",
+      "truth_value": false
+    },
+    {
+      "statement": "Winter is usually cold.",
+      "truth_value": true
+    },
+    {
+      "statement": "You can touch the stars.",
+      "truth_value": false
+    },
+    {
+      "statement": "Water is wet.",
+      "truth_value": true
+    },
+    {
+      "statement": "The Moon is made of cheese.",
+      "truth_value": false
+    },
+    {
+      "statement": "Dogs have tails.",
+      "truth_value": true
+    },
+    {
+      "statement": "Dolphins are fish.",
+      "truth_value": false
+    },
+    {
+      "statement": "Grass is usually green.",
+      "truth_value": true
+    },
+    {
+      "statement": "Penguins can fly.",
+      "truth_value": false
+    },
+    {
+      "statement": "The alphabet has 26 letters.",
+      "truth_value": true
+    },
+    {
+      "statement": "Humans can breathe underwater.",
+      "truth_value": false
+    },
+    {
+      "statement": "Pizza is a type of food.",
+      "truth_value": true
+    },
+    {
+      "statement": "Cars can fly.",
+      "truth_value": false
+    },
+    {
+      "statement": "Pencils are used for writing.",
+      "truth_value": true
+    },
+    {
+      "statement": "The ocean is made of soda.",
+      "truth_value": false
+    },
+    {
+      "statement": "Shoes are worn on feet.",
+      "truth_value": true
+    },
+    {
+      "statement": "Elephants are smaller than cats.",
+      "truth_value": false
+    },
+    {
+      "statement": "Books are for reading.",
+      "truth_value": true
+    },
+    {
+      "statement": "Cows can fly.",
+      "truth_value": false
+    },
+    {
+      "statement": "Fire is hot.",
+      "truth_value": true
+    },
+    {
+      "statement": "Rocks are soft and fluffy.",
+      "truth_value": false
+    },
+    {
+      "statement": "The number after 9 is 10.",
+      "truth_value": true
+    },
+    {
+      "statement": "You can eat clouds.",
+      "truth_value": false
+    },
+    {
+      "statement": "Rain is water falling from the sky.",
+      "truth_value": true
+    },
+    {
+      "statement": "Vegetables are bad for you.",
+      "truth_value": false
+    },
+    {
+      "statement": "The opposite of hot is cold.",
+      "truth_value": true
+    },
+    {
+      "statement": "Spiders have 10 legs.",
+      "truth_value": false
+    },
+    {
+      "statement": "You sleep at night.",
+      "truth_value": true
+    },
+    {
+      "statement": "A week has 10 days.",
+      "truth_value": false
+    },
+    {
+      "statement": "A triangle has 3 sides.",
+      "truth_value": true
+    },
+    {
+      "statement": "Bananas are always blue.",
+      "truth_value": false
+    },
+    {
+      "statement": "You can see with your eyes.",
+      "truth_value": true
+    },
+    {
+      "statement": "Chairs are for sleeping.",
+      "truth_value": false
+    },
+    {
+      "statement": "Flowers grow in gardens.",
+      "truth_value": true
+    },
+    {
+      "statement": "You can eat soup with a fork easily.",
+      "truth_value": false
+    },
+    {
+      "statement": "The color red and blue mixed make purple.",
+      "truth_value": true
+    },
+    {
+      "statement": "Horses live in the ocean.",
+      "truth_value": false
+    },
+    {
+      "statement": "Sugar tastes sweet.",
+      "truth_value": true
+    },
+    {
+      "statement": "You wear socks on your hands.",
+      "truth_value": false
+    },
+    {
+      "statement": "Buses are bigger than cars.",
+      "truth_value": true
+    },
+    {
+      "statement": "You can play soccer with a tennis racket.",
+      "truth_value": false
+    },
+    {
+      "statement": "The sun gives light during the day.",
+      "truth_value": true
+    },
+    {
+      "statement": "Fridges make food hot.",
+      "truth_value": false
+    },
+    {
+      "statement": "Teeth are used for chewing food.",
+      "truth_value": true
+    },
+    {
+      "statement": "Pillows are made of stone.",
+      "truth_value": false
+    },
+    {
+      "statement": "Plants need water to grow.",
+      "truth_value": true
+    },
+    {
+      "statement": "You can see your reflection in a piece of wood.",
+      "truth_value": false
+    },
+    {
+      "statement": "Squares have 4 sides.",
+      "truth_value": true
+    },
+    {
+      "statement": "Polar bears live in the jungle.",
+      "truth_value": false
     }
   ]
 }
