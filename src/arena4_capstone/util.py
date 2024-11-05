@@ -148,7 +148,7 @@ class ResidualStreamIntervention(Intervention):
         return cls.batch_learn(model, pos_prompts, neg_prompts, [layer], [magnitude])[0]
 
     def apply(self, model):
-        model.model.layers[self.layer].output[0][:, -1, :] += self.vector
+        model.model.layers[self.layer].output[0][:, -1, :] += self.vector * self.magnitude
 
 
 @t.inference_mode()
