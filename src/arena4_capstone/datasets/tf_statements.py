@@ -10,6 +10,8 @@ def create_tf_statements_dataset(filename: str):
     return util.load_df(filename).assign(
         lying_prompt=lambda df: prompt(df, lying_prompt_prefix),
         default_prompt=lambda df: prompt(df, default_prompt_prefix),
+        correct_output=lambda df: df.truth_value.astype(str).str.lower(),
+        incorrect_output=lambda df: (~df.truth_value).astype(str).str.lower(),
     )
 
 

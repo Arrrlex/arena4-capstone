@@ -1,8 +1,10 @@
 # %%
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 import functools
 import json
 from pathlib import Path
+from typing import Optional
 import pandas as pd
 import torch as t
 from pydantic_settings import BaseSettings
@@ -78,98 +80,119 @@ def combine(*lines: str) -> str:
     return "\n".join([start, middle, end])
 
 
-def vectorizable(func):
+def vectorize(func, first_arg, *args, out_type="list", threaded=False, **kwargs):
     """
-    Decorator to allow a function to be vectorized over a series or list.
+    Vectorize a function over a series or list.
     """
+    """
+    Vectorize a function over a series or list.
 
-    @functools.wraps(func)
-    def wrapper(first_arg, *args, as_tensor=False, threaded=False, **kwargs):
-        if not isinstance(first_arg, (pd.Series, list)):
-            return func(first_arg, *args, **kwargs)
+    Args:
+        func: The function to vectorize
+        *args: Positional arguments to pass to the function
+        as_tensor (bool): Whether to return a tensor instead of a series/list
+        threaded (bool): Whether to use parallel processing
+        **kwargs: Keyword arguments to pass to the function
+    """
+    first_arg = pd.Series(first_arg)
 
-        first_arg = pd.Series(first_arg)
+    # Function to be executed in parallel
+    apply_func = functools.partial(func, *args, **kwargs)
 
-        # Function to be executed in parallel
-        def apply_func(x):
-            return func(x, *args, **kwargs)
+    # Use ThreadPoolExecutor to map the function in parallel
+    if threaded:
+        with ThreadPoolExecutor() as executor:
+            results = list(executor.map(apply_func, first_arg))
+    else:
+        results = list(first_arg.map(apply_func))
 
-        # Use ThreadPoolExecutor to map the function in parallel
-        if threaded:
-            with ThreadPoolExecutor() as executor:
-                first_arg.iloc[:] = list(executor.map(apply_func, first_arg))
-                results = first_arg
-
-        else:
-            results = first_arg.map(apply_func)
-
-        if as_tensor:
-            return t.stack(list(results), dim=0)
-        else:
-            return results
-
-    return wrapper
+    if out_type == "tensor":
+        return t.stack(results, dim=0)
+    elif out_type == "series":
+        return pd.Series(results, index=first_arg.index)
+    elif out_type == "list":
+        return results
+    else:
+        raise ValueError(f"Invalid out_type: {out_type}")
 
 
-@vectorizable
+@dataclass
+class Intervention:
+    magnitude: float
+
+    @classmethod
+    def learn(cls, model, pos_prompts, neg_prompts, magnitude=1.0, **kwargs): ...
+
+    def apply(self, model, prompt): ...
+
+
+@dataclass
+class ResidualStreamIntervention(Intervention):
+    layer: int
+    magnitude: float
+    vector: t.Tensor
+
+    def with_magnitude(self, magnitude):
+        return ResidualStreamIntervention(
+            layer=self.layer, magnitude=magnitude, vector=self.vector
+        )
+
+    @classmethod
+    def batch_learn(cls, model, pos_prompts, neg_prompts, layers, magnitudes):
+        pos_vectors = last_token_batch_mean(pos_prompts, model)
+        neg_vectors = last_token_batch_mean(neg_prompts, model)
+        function_vecs = pos_vectors - neg_vectors
+
+        return {
+            (layer, magnitude): cls(
+                layer=layer, vector=function_vecs[layer], magnitude=magnitude
+            )
+            for layer, magnitude in zip(layers, magnitudes)
+        }
+
+    @classmethod
+    def learn(cls, model, pos_prompts, neg_prompts, layer, magnitude):
+        return cls.batch_learn(model, pos_prompts, neg_prompts, [layer], [magnitude])[0]
+
+    def apply(self, model):
+        model.model.layers[self.layer].output[0][:, -1, :] += self.vector
+
+
 @t.inference_mode()
-def next_logits(prompt: str, model, intervention: None | tuple[int, t.Tensor] = None):
+def next_logits(prompt: str, model, intervention: Optional[Intervention] = None):
     with model.trace(prompt, remote=settings.REMOTE_MODE):
         if intervention is not None:
-            layer, steering = intervention
-            model.model.layers[layer].output[0][:, -1, :] += steering
+            intervention.apply(model)
         log_probs = model.lm_head.output[..., -1, :].save()
 
-    log_probs = log_probs.value
-
-    assert log_probs.shape == (1, model.config.vocab_size)
-
-    return log_probs.squeeze()
+    return log_probs.value.squeeze()
 
 
-@vectorizable
-def next_token_str(
-    prompt: str, model, intervention: None | tuple[int, t.Tensor] = None
-):
+@t.inference_mode()
+def next_token_str(prompt: str, model, intervention: Optional[Intervention] = None):
     logits = next_logits(prompt, model, intervention)
 
-    assert logits.shape == (model.config.vocab_size,)
     return model.tokenizer.decode(logits.argmax(), skip_special_tokens=False)
 
 
-@vectorizable
 @t.inference_mode()
 def last_token_residual_stream(
-    prompt: str, model, intervention: None | tuple[int, t.Tensor] = None
+    prompt: str, model, intervention: Optional[Intervention] = None
 ):
     saves = []
     with model.trace(prompt, remote=settings.REMOTE_MODE):
         if intervention is not None:
-            layer, steering = intervention
-            model.model.layers[layer].output[0][:, -1, :] += steering
+            intervention.apply(model)
         for _, layer in enumerate(model.model.layers):
             saves.append(layer.output[0][:, -1, :].save())
 
-    saves = [save.value for save in saves]
-
-    tensor = t.stack(saves).squeeze()
-
-    assert tensor.shape == (model.config.num_hidden_layers, model.config.hidden_size)
-    return tensor
+    return t.stack([save.value for save in saves])
 
 
 def last_token_batch_mean(prompts: pd.Series, model):
-    residuals = last_token_residual_stream(prompts, model)
+    residuals = vectorize(last_token_residual_stream, prompts, model, as_tensor=True)
 
-    residuals = t.stack(list(residuals), dim=0)
-
-    assert residuals.shape == (
-        len(prompts),
-        model.config.num_hidden_layers,
-        model.config.hidden_size,
-    )
-
-    return residuals.mean(dim=0)
+    return residuals.mean(0)
 
 
 def accuracy(answers, df, comp=lambda a, c: a == c.correct):
@@ -178,11 +201,11 @@ def accuracy(answers, df, comp=lambda a, c: a == c.correct):
     return judgements.mean()
 
 
-@vectorizable
+@t.inference_mode()
 def continue_text(
     prompt: str,
     model,
-    intervention: None | tuple[int, t.Tensor] = None,
+    intervention: Optional[Intervention] = None,
     max_new_tokens=50,
     skip_special_tokens=True,
 ):
@@ -191,8 +214,7 @@ def continue_text(
     ) as generator:
         with generator.invoke(prompt):
             if intervention is not None:
-                layer, vector = intervention
-                model.model.layers[layer].output[0][:, -1, :] += vector
+                intervention.apply(model)
             for _ in range(max_new_tokens):
                 model.next()
             all_tokens = model.generator.output.save()
@@ -220,10 +242,11 @@ def continue_text(
     return complete_string
 
 
+@t.inference_mode()
 def batch_continue_text(
     prompts,
     model,
-    intervention: None | tuple[int, t.Tensor] = None,
+    intervention: Optional[Intervention] = None,
     max_new_tokens=50,
     skip_special_tokens=True,
 ):
@@ -232,8 +255,7 @@ def batch_continue_text(
     ) as generator:
         with generator.invoke(list(prompts)):
             if intervention is not None:
-                layer, vector = intervention
-                model.model.layers[layer].output[0][:, -1, :] += vector
+                intervention.apply(model)
             for _ in range(max_new_tokens):
                 model.next()
             all_tokens = model.generator.output.save()
@@ -269,10 +291,9 @@ def batch_continue_text(
 openai_client = OpenAI(api_key=settings.OPENAI_API_TOKEN)
 
 
-@vectorizable
-def openai_api(prompt, return_type, model="gpt-4o-mini"):
+def call_openai(prompt, return_type, model="gpt-4o-2024-08-06"):
     completion = openai_client.beta.chat.completions.parse(
-        model="gpt-4o-2024-08-06",
+        model=model,
         messages=[
             {"role": "user", "content": prompt},
         ],

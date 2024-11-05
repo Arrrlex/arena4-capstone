@@ -64,8 +64,8 @@ def mix_options(
     first_is_correct = rng.random(len(df)) < p_first_correct
     first_option = df["correct answer"].where(first_is_correct, df["incorrect answer"])
     second_option = df["incorrect answer"].where(first_is_correct, df["correct answer"])
-    correct_choice = opt1.where(first_is_correct, opt2)
-    incorrect_choice = opt2.where(first_is_correct, opt1)
+    correct_output = opt1.where(first_is_correct, opt2)
+    incorrect_output = opt2.where(first_is_correct, opt1)
 
     choices_str = s("").str.cat(
         [
@@ -82,7 +82,7 @@ def mix_options(
     return df.assign(
         first_option=first_option,
         second_option=second_option,
-        correct_choice=correct_choice,
-        incorrect_choice=incorrect_choice,
+        correct_output=correct_output,
+        incorrect_output=incorrect_output,
         choices_str=choices_str,
     )
