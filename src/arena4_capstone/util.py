@@ -79,41 +79,32 @@ def combine(*lines: str) -> str:
 
     return "\n".join([start, middle, end])
 
+def vectorize(func, out_type="list", threaded=False):
+    def wrapper(first_arg, *args, **kwargs):
+        first_arg = pd.Series(first_arg)
 
-def vectorize(func, first_arg, *args, out_type="list", threaded=False, **kwargs):
-    """
-    Vectorize a function over a series or list.
-    """
-    """
-    Vectorize a function over a series or list.
+        # Function to be executed in parallel
+        apply_func = functools.partial(func, *args, **kwargs)
 
-    Args:
-        func: The function to vectorize
-        *args: Positional arguments to pass to the function
-        as_tensor (bool): Whether to return a tensor instead of a series/list
-        threaded (bool): Whether to use parallel processing
-        **kwargs: Keyword arguments to pass to the function
-    """
-    first_arg = pd.Series(first_arg)
+        # Use ThreadPoolExecutor to map the function in parallel
+        if threaded:
+            with ThreadPoolExecutor() as executor:
+                results_list = list(executor.map(apply_func, first_arg))
+        else:
+            results_list = list(first_arg.map(apply_func))
 
-    # Function to be executed in parallel
-    apply_func = functools.partial(func, *args, **kwargs)
+        if out_type == "tensor":
+            results = t.stack(results_list, dim=0)
+        elif out_type == "series":
+            results = pd.Series(results_list, index=first_arg.index)
+        elif out_type == "list":
+            pass  # results is already a list
+        else:
+            raise ValueError(f"Invalid out_type: {out_type}")
 
-    # Use ThreadPoolExecutor to map the function in parallel
-    if threaded:
-        with ThreadPoolExecutor() as executor:
-            results = list(executor.map(apply_func, first_arg))
-    else:
-        results = list(first_arg.map(apply_func))
-
-    if out_type == "tensor":
-        return t.stack(results, dim=0)
-    elif out_type == "series":
-        return pd.Series(results, index=first_arg.index)
-    elif out_type == "list":
         return results
-    else:
-        raise ValueError(f"Invalid out_type: {out_type}")
+
+    return wrapper
 
 
 @dataclass
@@ -139,15 +130,17 @@ class ResidualStreamIntervention(Intervention):
 
     @classmethod
     def batch_learn(cls, model, pos_prompts, neg_prompts, layers, magnitudes):
-        pos_vectors = last_token_batch_mean(pos_prompts, model)
-        neg_vectors = last_token_batch_mean(neg_prompts, model)
+        get_residuals = vectorize(last_token_residual_stream, out_type="tensor")
+        pos_vectors = get_residuals(pos_prompts, model=model).mean(0)
+        neg_vectors = get_residuals(neg_prompts, model=model).mean(0)
         function_vecs = pos_vectors - neg_vectors
 
         return {
             (layer, magnitude): cls(
                 layer=layer, vector=function_vecs[layer], magnitude=magnitude
             )
-            for layer, magnitude in zip(layers, magnitudes)
+            for layer in layers
+            for magnitude in magnitudes
         }
 
     @classmethod
@@ -188,11 +181,6 @@ def last_token_residual_stream(
 
     return t.stack([save.value for save in saves])
 
-
-def last_token_batch_mean(prompts: pd.Series, model):
-    residuals = vectorize(last_token_residual_stream, prompts, model, as_tensor=True)
-
-    return residuals.mean(0)
 
 
 def accuracy(answers, df, comp=lambda a, c: a == c.correct):
