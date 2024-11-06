@@ -37,7 +37,7 @@ cot_answer_format = (
 )
 
 def create_tf_statements_dataset_simple(filename: str):
-    return util.load_df(filename).assign(
+    return load_df(filename).assign(
         lying_prompt=lambda df: simple_prompt(df, simple_lying_prefix),
         default_prompt=lambda df: simple_prompt(df, simple_default_prefix),
         correct_output=lambda df: df.truth_value.astype(str),
