@@ -9,11 +9,14 @@ import pandas as pd
 import torch as t
 from pydantic_settings import BaseSettings
 import nnsight
+from tqdm.auto import tqdm
 
 from openai import OpenAI
 
 project_root = Path(__file__).parents[2]
 plots_dir = project_root / "plots"
+
+tqdm.pandas()
 
 # %%
 
@@ -79,7 +82,7 @@ def combine(*lines: str) -> str:
 
     return "\n".join([start, middle, end])
 
-def vectorize(func, out_type="list", threaded=False):
+def vectorize(func, out_type="list", threaded=False, pbar=False):
     def wrapper(first_arg, *args, **kwargs):
         first_arg = pd.Series(first_arg)
 
@@ -89,9 +92,15 @@ def vectorize(func, out_type="list", threaded=False):
         # Use ThreadPoolExecutor to map the function in parallel
         if threaded:
             with ThreadPoolExecutor() as executor:
-                results_list = list(executor.map(apply_func, first_arg))
+                if pbar:
+                    results_list = list(tqdm(executor.map(apply_func, first_arg), total=len(first_arg)))
+                else:
+                    results_list = list(executor.map(apply_func, first_arg))
         else:
-            results_list = list(first_arg.map(apply_func))
+            if pbar:
+                results_list = list(first_arg.progress_map(apply_func))
+            else:
+                results_list = list(first_arg.map(apply_func))
 
         if out_type == "tensor":
             results = t.stack(results_list, dim=0)
@@ -110,6 +119,9 @@ def vectorize(func, out_type="list", threaded=False):
 @dataclass
 class Intervention:
     magnitude: float
+
+    @classmethod
+    def batch_learn(cls, model, pos_prompts, neg_prompts, magnitudes, **kwargs): ...
 
     @classmethod
     def learn(cls, model, pos_prompts, neg_prompts, magnitude=1.0, **kwargs): ...
@@ -134,7 +146,7 @@ class ResidualStreamIntervention(Intervention):
         pos_vectors = get_residuals(pos_prompts, model=model).mean(0)
         neg_vectors = get_residuals(neg_prompts, model=model).mean(0)
         function_vecs = pos_vectors - neg_vectors
-
+        
         return {
             (layer, magnitude): cls(
                 layer=layer, vector=function_vecs[layer], magnitude=magnitude
@@ -144,8 +156,9 @@ class ResidualStreamIntervention(Intervention):
         }
 
     @classmethod
-    def learn(cls, model, pos_prompts, neg_prompts, layer, magnitude):
-        return cls.batch_learn(model, pos_prompts, neg_prompts, [layer], [magnitude])[0]
+    def learn(cls, model, pos_prompts, neg_prompts, layer, magnitude=1.0):
+        interventions = cls.batch_learn(model, pos_prompts, neg_prompts, [layer], [magnitude])
+        return interventions[(layer, magnitude)]
 
     def apply(self, model):
         model.model.layers[self.layer].output[0][:, -1, :] += self.vector * self.magnitude
@@ -194,9 +207,12 @@ def continue_text(
     prompt: str,
     model,
     intervention: Optional[Intervention] = None,
+    intervention_pos: str = "last_input_token",
     max_new_tokens=50,
     skip_special_tokens=True,
 ):
+    if intervention_pos not in ["last_input_token", "all_tokens"]:
+        raise ValueError(f"Invalid intervention_pos: {intervention_pos}")
     with model.generate(
         max_new_tokens=max_new_tokens, remote=settings.REMOTE_MODE
     ) as generator:
@@ -205,6 +221,8 @@ def continue_text(
                 intervention.apply(model)
             for _ in range(max_new_tokens):
                 model.next()
+                if intervention is not None and intervention_pos == "all_tokens":
+                    intervention.apply(model)
             all_tokens = model.generator.output.save()
 
     complete_string = model.tokenizer.batch_decode(
