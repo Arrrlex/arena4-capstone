@@ -5,7 +5,7 @@ Create a dataset of multiple choice questions.
 import pandas as pd
 import numpy as np
 import arena4_capstone.util as util
-from arena4_capstone.datasets.utils import combine, user
+from arena4_capstone.datasets.utils import load_df, combine, user
 
 def create_mcq_dataset(
     name: str,
@@ -14,7 +14,7 @@ def create_mcq_dataset(
     rng: np.random.RandomState = np.random.RandomState(42),
 ):
     return (
-        util.load_df(name)
+        load_df(name)
         .pipe(
             mix_options,
             option_names=option_names,

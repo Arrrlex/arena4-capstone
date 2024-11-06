@@ -42,25 +42,6 @@ if settings.REMOTE_MODE:
 # %%
 
 
-def load_df(filename, shuffle: bool = True, random_state: int = 42):
-    """
-    Load a dataset from a json file.
-
-    Args:
-        filename (str): The name of the file to load.
-        shuffle (bool, optional): Whether to shuffle the data. Defaults to True.
-        random_state (int, optional): The random state to use for shuffling. Defaults to 42.
-    """
-    with open(project_root / "datasets" / filename) as f:
-        data = json.load(f)["data"]
-    result_df = pd.DataFrame(data)
-    if shuffle:
-        result_df = result_df.sample(frac=1, random_state=random_state).reset_index(
-            drop=True
-        )
-    return result_df
-
-
 def map_with(f, a: pd.Series, df: pd.DataFrame) -> pd.Series:
     """
     Map a function over a series and a dataframe row-wise.
@@ -71,16 +52,6 @@ def map_with(f, a: pd.Series, df: pd.DataFrame) -> pd.Series:
     assert len(a) == len(df)
     return pd.Series([f(a_i, df.iloc[i]) for i, a_i in enumerate(a)], index=a.index)
 
-
-def combine(*lines: str) -> str:
-    """
-    Combine a list of strings into a single string with a turn delimiter.
-    """
-    start = "<start_of_turn>user"
-    middle = "\n".join(lines)
-    end = "<end_of_turn>\n<start_of_turn>model\n"
-
-    return "\n".join([start, middle, end])
 
 def vectorize(func, out_type="list", threaded=False, pbar=False):
     def wrapper(first_arg, *args, **kwargs):
@@ -115,6 +86,9 @@ def vectorize(func, out_type="list", threaded=False, pbar=False):
 
     return wrapper
 
+# ===
+# Interventions
+# ===
 
 @dataclass
 class Intervention:
@@ -163,6 +137,9 @@ class ResidualStreamIntervention(Intervention):
     def apply(self, model):
         model.model.layers[self.layer].output[0][:, -1, :] += self.vector * self.magnitude
 
+# ===
+# Model Inference
+# ===
 
 @t.inference_mode()
 def next_logits(prompt: str, model, intervention: Optional[Intervention] = None):
@@ -308,14 +285,6 @@ def call_openai(prompt, return_type, model="gpt-4o-2024-08-06"):
 
     value = completion.choices[0].message.parsed
     return value
-
-
-def train_test_split(df, train_fraction=0.75):
-    train_size = int(len(df) * train_fraction)
-    train_set = df.iloc[:train_size].reset_index(drop=True)
-    test_set = df.iloc[train_size:].reset_index(drop=True)
-
-    return train_set, test_set
 
 
 def append(df: pd.DataFrame, row: dict) -> pd.DataFrame:
