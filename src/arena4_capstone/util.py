@@ -2,7 +2,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import functools
-import json
 from pathlib import Path
 from typing import Optional
 import pandas as pd
@@ -42,17 +41,6 @@ if settings.REMOTE_MODE:
 # %%
 
 
-def map_with(f, a: pd.Series, df: pd.DataFrame) -> pd.Series:
-    """
-    Map a function over a series and a dataframe row-wise.
-
-    Returns a series `out` where `out[i] = f(a[i], df.iloc[i])` for all `i`.
-    """
-    assert a.index.equals(df.index)
-    assert len(a) == len(df)
-    return pd.Series([f(a_i, df.iloc[i]) for i, a_i in enumerate(a)], index=a.index)
-
-
 def vectorize(func, out_type="list", threaded=False, pbar=False):
     def wrapper(first_arg, *args, **kwargs):
         first_arg = pd.Series(first_arg)
@@ -64,7 +52,9 @@ def vectorize(func, out_type="list", threaded=False, pbar=False):
         if threaded:
             with ThreadPoolExecutor() as executor:
                 if pbar:
-                    results_list = list(tqdm(executor.map(apply_func, first_arg), total=len(first_arg)))
+                    results_list = list(
+                        tqdm(executor.map(apply_func, first_arg), total=len(first_arg))
+                    )
                 else:
                     results_list = list(executor.map(apply_func, first_arg))
         else:
@@ -86,9 +76,11 @@ def vectorize(func, out_type="list", threaded=False, pbar=False):
 
     return wrapper
 
+
 # ===
 # Interventions
 # ===
+
 
 @dataclass
 class Intervention:
@@ -120,7 +112,7 @@ class ResidualStreamIntervention(Intervention):
         pos_vectors = get_residuals(pos_prompts, model=model).mean(0)
         neg_vectors = get_residuals(neg_prompts, model=model).mean(0)
         function_vecs = pos_vectors - neg_vectors
-        
+
         return {
             (layer, magnitude): cls(
                 layer=layer, vector=function_vecs[layer], magnitude=magnitude
@@ -131,15 +123,21 @@ class ResidualStreamIntervention(Intervention):
 
     @classmethod
     def learn(cls, model, pos_prompts, neg_prompts, layer, magnitude=1.0):
-        interventions = cls.batch_learn(model, pos_prompts, neg_prompts, [layer], [magnitude])
+        interventions = cls.batch_learn(
+            model, pos_prompts, neg_prompts, [layer], [magnitude]
+        )
         return interventions[(layer, magnitude)]
 
     def apply(self, model):
-        model.model.layers[self.layer].output[0][:, -1, :] += self.vector * self.magnitude
+        model.model.layers[self.layer].output[0][:, -1, :] += (
+            self.vector * self.magnitude
+        )
+
 
 # ===
 # Model Inference
 # ===
+
 
 @t.inference_mode()
 def next_logits(prompt: str, model, intervention: Optional[Intervention] = None):
@@ -170,13 +168,6 @@ def last_token_residual_stream(
             saves.append(layer.output[0][:, -1, :].save())
 
     return t.stack([save.value for save in saves])
-
-
-
-def accuracy(answers, df, comp=lambda a, c: a == c.correct):
-    judgements = pd.Series([comp(a, c) for a, (_, c) in zip(answers, df.iterrows())])
-
-    return judgements.mean()
 
 
 @t.inference_mode()
