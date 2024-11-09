@@ -41,7 +41,7 @@ if settings.REMOTE_MODE:
 # %%
 
 
-def vectorize(func, out_type="list", threaded=False, pbar=False):
+def vectorize(func, *, out_type="list", threaded=False, pbar=False):
     def wrapper(first_arg, *args, **kwargs):
         first_arg = pd.Series(first_arg)
 
@@ -140,7 +140,7 @@ class ResidualStreamIntervention(Intervention):
 
 
 @t.inference_mode()
-def next_logits(prompt: str, model, intervention: Optional[Intervention] = None):
+def next_logits(prompt: str, *, model, intervention: Optional[Intervention] = None):
     with model.trace(prompt, remote=settings.REMOTE_MODE):
         if intervention is not None:
             intervention.apply(model)
@@ -150,7 +150,7 @@ def next_logits(prompt: str, model, intervention: Optional[Intervention] = None)
 
 
 @t.inference_mode()
-def next_token_str(prompt: str, model, intervention: Optional[Intervention] = None):
+def next_token_str(prompt: str, *, model, intervention: Optional[Intervention] = None):
     logits = next_logits(prompt, model, intervention)
 
     return model.tokenizer.decode(logits.argmax(), skip_special_tokens=False)
@@ -158,7 +158,7 @@ def next_token_str(prompt: str, model, intervention: Optional[Intervention] = No
 
 @t.inference_mode()
 def last_token_residual_stream(
-    prompt: str, model, intervention: Optional[Intervention] = None
+    prompt: str, *, model, intervention: Optional[Intervention] = None
 ):
     saves = []
     with model.trace(prompt, remote=settings.REMOTE_MODE):
@@ -173,6 +173,7 @@ def last_token_residual_stream(
 @t.inference_mode()
 def continue_text(
     prompt: str,
+    *,
     model,
     intervention: Optional[Intervention] = None,
     intervention_pos: str = "last_input_token",
@@ -219,6 +220,7 @@ def continue_text(
 @t.inference_mode()
 def batch_continue_text(
     prompts,
+    *,
     model,
     intervention: Optional[Intervention] = None,
     max_new_tokens=50,
