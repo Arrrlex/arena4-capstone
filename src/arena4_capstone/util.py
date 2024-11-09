@@ -158,7 +158,7 @@ def next_logits(prompt: str, *, model, intervention: Optional[Intervention] = No
 
 @t.inference_mode()
 def next_token_str(prompt: str, *, model, intervention: Optional[Intervention] = None):
-    logits = next_logits(prompt, model, intervention)
+    logits = next_logits(prompt, model=model, intervention=intervention)
 
     return model.tokenizer.decode(logits.argmax(), skip_special_tokens=False)
 
