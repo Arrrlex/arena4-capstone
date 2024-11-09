@@ -21,6 +21,13 @@ tqdm.pandas()
 
 
 class Settings(BaseSettings):
+    """
+    Settings for the project.
+
+    NNSIGHT_API_TOKEN is only required if REMOTE_MODE is True. This is obtained
+      from https://login.ndif.us/
+    """
+
     HF_API_TOKEN: str
     NNSIGHT_API_TOKEN: str = None
     OPENAI_API_TOKEN: str = None

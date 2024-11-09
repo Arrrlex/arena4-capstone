@@ -4,7 +4,8 @@ Full docs coming soon!
 
 ## Setting up locally
 
-Make sure uv is installed and run `uv sync`.
+1. Make sure [uv is installed](https://docs.astral.sh/uv/) and run `uv sync`.
+2. Obtain any environment variables needed (You can read the `Settings` class in [util.py](/src/arena4_capstone/util.py#L23) to see all of them) and put them in `arena4-capstone/.env`.
 
 ## Setting up a new machine
 
@@ -17,13 +18,7 @@ My laptop isn't powerful enough to run Gemma locally, so here's the steps I've b
    uv run add_ssh_host.py vast "ssh -p ...."
    ```
    This will add an ssh host called "vast" to your SSH config. Change "vast" to anything you want this host to be called.
-3. Get api keys and put them in `.env` inside `arena4-capstone`
-   - From my local checkout of arena4-capstone, I run `scp .env vast:arena4-capstone/`
-   - You can read the `Settings` class in [util.py](/src/arena4_capstone/util.py) to see what API keys to get and which are required
-4. Configure git
-   - Locally run `scp ~/.gitconfig vast:~/`
-5. Connect to the machine
-6. On the remote machine, install requirements & clone repo using this command:
+3. On the remote machine, install requirements & clone repo using this command:
    ```bash
    curl -LsSf https://astral.sh/uv/install.sh | sh && \
    source ~/.bashrc && uv python install 3.12 && \
@@ -31,4 +26,14 @@ My laptop isn't powerful enough to run Gemma locally, so here's the steps I've b
    cd arena4-capstone && \
    uv sync
    ```
-7. If using VSCode or Cursor, install Python and Jupyter extensions
+4. If using VSCode or Cursor, ensure Python and Jupyter extensions are installed. You can do this manually, or you can do it once by adding the following snippet to your `settings.json`:
+   ```json
+   "remote.SSH.defaultExtensions": [
+      "ms-toolsai.jupyter",
+      "ms-python.python"
+   ]
+   ```
+5. Get any secrets and configuration from your local machine to the remote machine. Locally, run this command:
+   ```bash
+   scp .env vast:arena4-capstone/ && scp ~/.gitconfig vast:~/
+   ```
