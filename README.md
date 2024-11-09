@@ -2,6 +2,10 @@
 
 Full docs coming soon!
 
+## Setting up locally
+
+Make sure uv is installed and run `uv sync`.
+
 ## Setting up a new machine
 
 My laptop isn't powerful enough to run Gemma locally, so here's the steps I've been taking to get everything up and running on a vast.ai machine:
