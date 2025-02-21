@@ -422,7 +422,7 @@ interventions = util.ResidualStreamIntervention.batch_learn(
 layer = 13
 magnitude = 8
 completions = util.batch_continue_text(
-    easy_test.default_prompt, gemma, interventions[layer, magnitude]
+    easy_test.default_prompt, model=gemma, intervention=interventions[layer, magnitude]
 )
 completions = pd.Series(completions, index=easy_test.index)
 
