@@ -279,8 +279,8 @@ for layer in tqdm(range(gemma.config.num_hidden_layers), desc="Layers"):
     )
 
     # Get the logits for the incorrect and correct answers
-    incorrect_logits = logits[:, incorrect_token_ids]
-    correct_logits = logits[:, correct_token_ids]
+    incorrect_logits = logits[np.arange(logits.shape[0]), incorrect_token_ids]
+    correct_logits = logits[np.arange(logits.shape[0]), correct_token_ids]
 
     # Calculate the logit difference
     logit_diffs[intervention.layer] = (incorrect_logits - correct_logits).mean()
