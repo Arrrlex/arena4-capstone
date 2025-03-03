@@ -157,7 +157,7 @@ def ai_judge_accuracy(answers, df):
     assert t.isclose(t.Tensor([correct + incorrect + ambiguous]), t.Tensor([1]))
     return correct, incorrect, ambiguous
 
-# %%
+
 #Load dataframes
 easy_df = load_df("mcq_simple.json")
 hard_df = load_df("mcq_12_yo.json")
@@ -166,7 +166,7 @@ easy_train, easy_test = prepare_mcq(easy_df)
 hard_train, hard_test = prepare_mcq(hard_df)
 
 
-# %%
+
 # Create steering vectors on hard train
 hard_lying_vectors = last_token_batch_mean(hard_train.lying_prompt, gemma)
 hard_honest_vectors = last_token_batch_mean(hard_train.honest_prompt, gemma)

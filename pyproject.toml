@@ -1,0 +1,23 @@
+[project]
+name = "my_project"
+version = "0.1.0"
+description = "My project description"
+
+dependencies = [
+    "numpy",
+    "pandas",
+    "plotly",
+    "torch",
+    "transformers",
+    "pydantic",
+    "tqdm",
+    "openai",
+    "ipykernel>=6.29.5",
+    "nnsight>=0.4.3",
+    "dotenv>=0.9.9",
+    "jaxtyping>=0.2.38",
+]
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"

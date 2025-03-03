@@ -1,4 +1,5 @@
 # %%
+import os
 import random
 from typing import Literal
 from textwrap import dedent
@@ -23,12 +24,14 @@ import functools
 from concurrent.futures import ThreadPoolExecutor
 
 project_root = Path(__file__).parent.parent.parent
+print(project_root)
+
+dotenv.load_dotenv(project_root / ".env")
 
 
 
 # %%
-API_TOKEN = open(project_root / "token.txt").read()
-
+API_TOKEN = os.environ['HF_API_TOKEN']
 t.cuda.empty_cache()
 
 device = t.device("cuda" if t.cuda.is_available() else "cpu")
