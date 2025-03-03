@@ -185,8 +185,8 @@ plt.savefig(util.plots_dir / "mcq_easy_judgements.jpg")
 # %%
 interventions_train = util.ResidualStreamIntervention.batch_learn(
     model=gemma,
-    pos_prompts=easy_train.lying_prompt,
-    neg_prompts=easy_train.default_prompt,
+    pos_prompts=hard_mcq.lying_prompt,
+    neg_prompts=hard_mcq.default_prompt,
     layers=range(gemma.config.num_hidden_layers),
     magnitudes=range(-3, 9),
 )
