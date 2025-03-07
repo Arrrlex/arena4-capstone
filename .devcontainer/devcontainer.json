@@ -1,0 +1,14 @@
+{
+	// For quick reference: https://containers.dev/implementors/json_reference/
+	"name": "Pytorch GPU",
+	"image": "nvidia/cuda:11.8.0-devel-ubuntu22.04",
+	"runArgs": ["--gpus", "all"],
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"ms-python.python",
+				"jupyter.notebook-extension"
+			]
+		}
+	}
+}
