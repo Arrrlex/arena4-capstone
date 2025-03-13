@@ -1,5 +1,6 @@
 {
     "recommendations": [
+        "zaaack.markdown-editor",
         "ms-toolsai.jupyter",
         "ms-python.python"
     ]
