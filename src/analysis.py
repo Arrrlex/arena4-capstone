@@ -253,41 +253,68 @@ plt.savefig(util.plots_dir / "mcq_easy_pca.jpg")
 # ## Using Logit Difference
 
 # %%
-logit_diffs = t.zeros(gemma_2_2b_it.config.num_hidden_layers)
+import nnsight
+def get_logit_diffs(model: nnsight.LanguageModel, dataset: pd.DataFrame, trained_interventions: dict[tuple[int, int], util.Intervention], intervention_coeff: int) -> t.Tensor:
+    logit_diffs = t.zeros(model.config.num_hidden_layers)
 
-correct_token_ids = np.array(
-    [
-        gemma_2_2b_it.tokenizer.encode(choice, add_special_tokens=False)[0]
-        for choice in easy_train.correct_output
-    ]
-)
-incorrect_token_ids = np.array(
-    [
-        gemma_2_2b_it.tokenizer.encode(choice, add_special_tokens=False)[0]
-        for choice in easy_train.incorrect_output
-    ]
-)
+    assert model.config.num_hidden_layers == len(set(layer for layer, coeff in trained_interventions.keys())), "Number of trained layers does not match model's number of layers, possibly incompatible model"
 
-for layer in tqdm(range(gemma_2_2b_it.config.num_hidden_layers), desc="Layers"):
-    intervention = interventions_train[layer, 1]
-
-    logits = next_logits(
-        easy_train.default_prompt,
-        model=gemma_2_2b_it,
-        intervention=intervention,
+    correct_token_ids = t.tensor(
+        [
+            model.tokenizer.encode(choice, add_special_tokens=False)[0]
+            for choice in dataset.correct_output
+        ]
+    )
+    incorrect_token_ids = t.tensor(
+        [
+            model.tokenizer.encode(choice, add_special_tokens=False)[0]
+            for choice in dataset.incorrect_output
+        ]
     )
 
-    # Get the logits for the incorrect and correct answers
-    incorrect_logits = logits[np.arange(logits.shape[0]), incorrect_token_ids]
-    correct_logits = logits[np.arange(logits.shape[0]), correct_token_ids]
+    for layer in tqdm(range(model.config.num_hidden_layers), desc="Layers"):
+        intervention: util.Intervention = trained_interventions[layer, intervention_coeff]
 
-    # Calculate the logit difference
-    logit_diffs[intervention.layer] = (incorrect_logits - correct_logits).mean()
+        logits = next_logits(
+            dataset.default_prompt,
+            model=model,
+            intervention=intervention,
+        )
+
+        # Get the logits for the incorrect and correct answers
+        incorrect_logits = logits[t.arange(logits.shape[0]), incorrect_token_ids]
+        correct_logits = logits[t.arange(logits.shape[0]), correct_token_ids]
+
+        # Calculate the logit difference
+        logit_diffs[layer] = (incorrect_logits - correct_logits).mean()
+
+    return logit_diffs
 
 # %%
+logit_diffs_2b = get_logit_diffs(gemma_2_2b_it, easy_train, interventions_train, 1)
+
 df = pd.DataFrame(
-    {"Layer": range(gemma_2_2b_it.config.num_hidden_layers), "Logit Difference": logit_diffs}
+    {"Layer": range(logit_diffs_2b.shape[0]), "Logit Difference": logit_diffs_2b}
 )
+sns.lineplot(data=df, x="Layer", y="Logit Difference")
+plt.title("Logit Difference by Layer")
+plt.savefig(util.plots_dir / "mcq_easy_logit_diffs.jpg")
+
+# %%
+interventions_9b = util.ResidualStreamIntervention.batch_learn(
+    model=gemma_2_9b_it,
+    pos_prompts=easy_train.lying_prompt,
+    neg_prompts=easy_train.default_prompt,
+    layers=range(gemma_2_9b_it.config.num_hidden_layers),
+    magnitudes=range(-3, 9),
+)
+# %%
+logit_diffs_9b = get_logit_diffs(gemma_2_9b_it, easy_train, interventions_9b, 1)
+# %%
+df = pd.DataFrame(
+    {"Layer": range(logit_diffs_9b.shape[0]), "Logit Difference": logit_diffs_9b}
+)
+
 sns.lineplot(data=df, x="Layer", y="Logit Difference")
 plt.title("Logit Difference by Layer")
 plt.savefig(util.plots_dir / "mcq_easy_logit_diffs.jpg")
