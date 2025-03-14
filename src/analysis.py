@@ -146,8 +146,16 @@ continue_text = util.vectorize(util.continue_text, out_type="series", pbar=True)
 # %%
 easy_mcq = create_mcq_dataset("mcq_5_yo.json", rng=rng)
 hard_mcq = create_mcq_dataset("mcq_12_yo.json", rng=rng)
+
 easy_train, easy_test = train_test_split(easy_mcq, train_fraction=0.75)
+
 hard_train, hard_test = train_test_split(hard_mcq, train_fraction=0.75)
+
+easy_train: pd.DataFrame
+easy_test: pd.DataFrame
+hard_test: pd.DataFrame
+hard_train: pd.DataFrame
+
 
 # %% [markdown]
 # # Can the model even lie?
@@ -182,7 +190,7 @@ plt.savefig(util.plots_dir / "mcq_easy_judgements.jpg")
 # # Extracting Lying Behaviour as Function Vector
 
 # %%
-interventions_train = util.ResidualStreamIntervention.batch_learn(
+interventions_train: dict[tuple[int, int], util.Intervention] = util.ResidualStreamIntervention.batch_learn(
     model=gemma_2_2b_it,
     pos_prompts=hard_mcq.lying_prompt,
     neg_prompts=hard_mcq.default_prompt,
@@ -253,36 +261,11 @@ plt.savefig(util.plots_dir / "mcq_easy_pca.jpg")
 # ## Using Logit Difference
 
 # %%
-logit_diffs = t.zeros(gemma_2_2b_it.config.num_hidden_layers)
+import arena4_capstone.util as util
+logit_diffs_2b = util.get_logit_diffs(gemma_2_2b_it, easy_train, interventions_train, 1)
+logit_diffs_9b = util.get_logit_diffs(gemma_2_9b_it, easy_train, interventions_train, 1)
 
-correct_token_ids = np.array(
-    [
-        gemma_2_2b_it.tokenizer.encode(choice, add_special_tokens=False)[0]
-        for choice in easy_train.correct_output
-    ]
-)
-incorrect_token_ids = np.array(
-    [
-        gemma_2_2b_it.tokenizer.encode(choice, add_special_tokens=False)[0]
-        for choice in easy_train.incorrect_output
-    ]
-)
 
-for layer in tqdm(range(gemma_2_2b_it.config.num_hidden_layers), desc="Layers"):
-    intervention = interventions_train[layer, 1]
-
-    logits = next_logits(
-        easy_train.default_prompt,
-        model=gemma_2_2b_it,
-        intervention=intervention,
-    )
-
-    # Get the logits for the incorrect and correct answers
-    incorrect_logits = logits[np.arange(logits.shape[0]), incorrect_token_ids]
-    correct_logits = logits[np.arange(logits.shape[0]), correct_token_ids]
-
-    # Calculate the logit difference
-    logit_diffs[intervention.layer] = (incorrect_logits - correct_logits).mean()
 
 # %%
 df = pd.DataFrame(
