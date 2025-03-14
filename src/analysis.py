@@ -7,7 +7,7 @@
 # %%
 import arena4_capstone.util as util
 
-from arena4_capstone.models import gemma
+from arena4_capstone.models import gemma_2_2b_it, gemma_2_9b_it
 from arena4_capstone.datasets.mcq import (
     create_mcq_dataset,
 )
@@ -22,7 +22,6 @@ import seaborn as sns
 from tqdm.auto import tqdm
 import torch as t
 import matplotlib.pyplot as plt
-import einops
 from sklearn.decomposition import PCA
 
 
@@ -161,7 +160,7 @@ hard_train, hard_test = train_test_split(hard_mcq, train_fraction=0.75)
 easy_judgements = get_all_judgements(
     dataset=easy_mcq,
     judge=judge_simple,
-    call_model=partial(next_token, model=gemma),
+    call_model=partial(next_token, model=gemma_2_2b_it),
 )
 
 sns.catplot(
@@ -184,10 +183,10 @@ plt.savefig(util.plots_dir / "mcq_easy_judgements.jpg")
 
 # %%
 interventions_train = util.ResidualStreamIntervention.batch_learn(
-    model=gemma,
+    model=gemma_2_2b_it,
     pos_prompts=hard_mcq.lying_prompt,
     neg_prompts=hard_mcq.default_prompt,
-    layers=range(gemma.config.num_hidden_layers),
+    layers=range(gemma_2_2b_it.config.num_hidden_layers),
     magnitudes=range(-3, 9),
 )
 
@@ -206,14 +205,14 @@ interventions_train = util.ResidualStreamIntervention.batch_learn(
 # %%
 get_activations = util.vectorize(util.last_token_residual_stream, out_type="tensor")
 
-lying_vectors = get_activations(easy_mcq.lying_prompt, model=gemma).cpu().numpy()
-honest_vectors = get_activations(easy_mcq.default_prompt, model=gemma).cpu().numpy()
+lying_vectors = get_activations(easy_mcq.lying_prompt, model=gemma_2_2b_it).cpu().numpy()
+honest_vectors = get_activations(easy_mcq.default_prompt, model=gemma_2_2b_it).cpu().numpy()
 
 
 activations = np.vstack((lying_vectors, honest_vectors)).squeeze()
 
 # Calculate PCA coordinates for each layer
-n_layers = gemma.config.num_hidden_layers
+n_layers = gemma_2_2b_it.config.num_hidden_layers
 n_samples = len(easy_mcq)
 pcas = [
     PCA(n_components=2).fit_transform(activations[:, layer, :])
@@ -254,27 +253,27 @@ plt.savefig(util.plots_dir / "mcq_easy_pca.jpg")
 # ## Using Logit Difference
 
 # %%
-logit_diffs = t.zeros(gemma.config.num_hidden_layers)
+logit_diffs = t.zeros(gemma_2_2b_it.config.num_hidden_layers)
 
 correct_token_ids = np.array(
     [
-        gemma.tokenizer.encode(choice, add_special_tokens=False)[0]
+        gemma_2_2b_it.tokenizer.encode(choice, add_special_tokens=False)[0]
         for choice in easy_train.correct_output
     ]
 )
 incorrect_token_ids = np.array(
     [
-        gemma.tokenizer.encode(choice, add_special_tokens=False)[0]
+        gemma_2_2b_it.tokenizer.encode(choice, add_special_tokens=False)[0]
         for choice in easy_train.incorrect_output
     ]
 )
 
-for layer in tqdm(range(gemma.config.num_hidden_layers), desc="Layers"):
+for layer in tqdm(range(gemma_2_2b_it.config.num_hidden_layers), desc="Layers"):
     intervention = interventions_train[layer, 1]
 
     logits = next_logits(
         easy_train.default_prompt,
-        model=gemma,
+        model=gemma_2_2b_it,
         intervention=intervention,
     )
 
@@ -287,7 +286,7 @@ for layer in tqdm(range(gemma.config.num_hidden_layers), desc="Layers"):
 
 # %%
 df = pd.DataFrame(
-    {"Layer": range(gemma.config.num_hidden_layers), "Logit Difference": logit_diffs}
+    {"Layer": range(gemma_2_2b_it.config.num_hidden_layers), "Logit Difference": logit_diffs}
 )
 sns.lineplot(data=df, x="Layer", y="Logit Difference")
 plt.title("Logit Difference by Layer")
@@ -303,12 +302,12 @@ plt.savefig(util.plots_dir / "mcq_easy_logit_diffs.jpg")
 # %%
 lying_accuracies = []
 
-for layer in tqdm(range(gemma.config.num_hidden_layers), desc="Layers"):
+for layer in tqdm(range(gemma_2_2b_it.config.num_hidden_layers), desc="Layers"):
     for coeff in tqdm(range(-3, 9), desc=f"Coeffs for layer {layer}"):
         judgements_intervened = easy_test.assign(
             answer=lambda df: next_token(
                 df.default_prompt,
-                model=gemma,
+                model=gemma_2_2b_it,
                 intervention=interventions_train[layer, coeff],
             ),
             Judgement=lambda df: df.apply(judge_simple, axis=1),
@@ -351,7 +350,7 @@ def add_missing_judgement_rows(
 lying_accuracies = add_missing_judgement_rows(lying_accuracies)
 
 n_cols = 5
-n_rows = (gemma.config.num_hidden_layers + n_cols - 1) // n_cols
+n_rows = (gemma_2_2b_it.config.num_hidden_layers + n_cols - 1) // n_cols
 
 colours = {
     "correct": "#2E86C1",  # trustworthy blue
@@ -408,10 +407,10 @@ plt.savefig(util.plots_dir / "mcq_easy_lying_accuracies.jpg")
 
 # %%
 interventions = util.ResidualStreamIntervention.batch_learn(
-    model=gemma,
+    model=gemma_2_2b_it,
     pos_prompts=easy_train.lying_prompt,
     neg_prompts=easy_train.default_prompt,
-    layers=range(gemma.config.num_hidden_layers),
+    layers=range(gemma_2_2b_it.config.num_hidden_layers),
     magnitudes=range(-3, 9),
 )
 
@@ -422,7 +421,7 @@ interventions = util.ResidualStreamIntervention.batch_learn(
 layer = 13
 magnitude = 8
 completions = util.batch_continue_text(
-    easy_test.default_prompt, model=gemma, intervention=interventions[layer, magnitude]
+    easy_test.default_prompt, model=gemma_2_2b_it, intervention=interventions[layer, magnitude]
 )
 completions = pd.Series(completions, index=easy_test.index)
 
@@ -440,7 +439,7 @@ easy_test.assign(answer=completions)[["question", "choices_str", "answer"]]
 layer = 23
 for coeff in [8, -3]:
     answers = next_token(
-        easy_train.default_prompt, model=gemma, intervention=interventions[layer, coeff]
+        easy_train.default_prompt, model=gemma_2_2b_it, intervention=interventions[layer, coeff]
     ).value_counts()
     print(f"Layer {layer}, Coeff {coeff}:")
     print(", ".join(f"{k}: {v}" for k, v in answers.items()))
@@ -467,7 +466,7 @@ judgements_1_2 = get_all_judgements(
     easy_mcq_1_2,
     intervention=interventions[layer, magnitude],
     judge=judge_simple,
-    call_model=partial(next_token, model=gemma),
+    call_model=partial(next_token, model=gemma_2_2b_it),
 )
 
 
@@ -491,7 +490,7 @@ layer = 14
 for coeff in tqdm(range(-3, 9)):
     judgements_intervened = easy_mcq_1_2.assign(
         answer=lambda df: next_token(
-            df.default_prompt, model=gemma, intervention=interventions[layer, coeff]
+            df.default_prompt, model=gemma_2_2b_it, intervention=interventions[layer, coeff]
         ),
         Judgement=lambda df: df.apply(judge_simple, axis=1),
         Prompt="Default w/ Intervention",
@@ -544,7 +543,7 @@ judgements_tf_cot = get_all_judgements(
     intervention=interventions[layer, magnitude],
     judge=judge_with_answer_tags,
     call_model=partial(
-        continue_text, model=gemma, max_new_tokens=200, intervention_pos="all_tokens"
+        continue_text, model=gemma_2_2b_it, max_new_tokens=200, intervention_pos="all_tokens"
     ),
 )
 
@@ -568,7 +567,7 @@ judgements_tf_simple = get_all_judgements(
     tf_dataset_simple,
     intervention=interventions[(layer, magnitude)],
     judge=judge_simple,
-    call_model=partial(next_token, model=gemma),
+    call_model=partial(next_token, model=gemma_2_2b_it),
 )
 
 sns.catplot(
