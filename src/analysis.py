@@ -5,12 +5,12 @@
 # ## Imports
 
 # %%
-import arena4_capstone.util as util
+import os
+os.environ["nnUNet_compile"] = "F"
 
+import arena4_capstone.util as util
 from arena4_capstone.models import gemma_2_2b_it, gemma_2_9b_it
-from arena4_capstone.datasets.mcq import (
-    create_mcq_dataset,
-)
+from arena4_capstone.datasets.mcq import create_mcq_dataset
 from arena4_capstone.datasets.tf_statements import (
     create_tf_statements_dataset_cot,
     create_tf_statements_dataset_simple,
@@ -23,23 +23,22 @@ from tqdm.auto import tqdm
 import torch as t
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
-
+from nnsight import LanguageModel
 
 import re
-from typing import Callable, Optional
+from typing import Callable, Dict, List, Optional, Tuple, Union
 from functools import partial
 import itertools
-
 
 # %%
 rng = np.random.RandomState(42)
 sns.set_theme(style="whitegrid", context="paper")
 
 # %% [markdown]
-# ## Some common functions
+# ## Common functions
 
 # %%
-def aggregate_judgements(judgements: pd.DataFrame):
+def aggregate_judgements(judgements: pd.DataFrame) -> pd.DataFrame:
     """
     Aggregate the judgements of a set of answers.
 
@@ -58,7 +57,8 @@ def aggregate_judgements(judgements: pd.DataFrame):
     )
 
 
-def judge_simple(row) -> str:
+def judge_simple(row: pd.Series) -> str:
+    """Judge if an answer is correct, incorrect, or unclear based on simple matching."""
     if row.answer == row.correct_output:
         return "correct"
     elif row.answer == row.incorrect_output:
@@ -67,7 +67,8 @@ def judge_simple(row) -> str:
         return "unclear"
 
 
-def judge_with_answer_tags(row):
+def judge_with_answer_tags(row: pd.Series) -> str:
+    """Judge if an answer is correct, incorrect, or unclear based on answer tags."""
     try:
         match = re.search(r"<answer>(.*)</answer>", row.answer)
         answer = match.group(1)
@@ -84,20 +85,22 @@ def judge_with_answer_tags(row):
 
 def get_all_judgements(
     dataset: pd.DataFrame,
-    judge: Callable,
+    judge: Callable[[pd.Series], str],
     call_model: Callable,
     intervention: Optional[util.Intervention] = None,
-):
+) -> pd.DataFrame:
     """
     Get the judgements for a dataset, both with and without an intervention.
 
-    Returns a dataframe with columns "Judgement" and "Percentage".
+    Args:
+        dataset: DataFrame with columns "default_prompt" and "lying_prompt"
+        judge: Function that takes a row of the dataset and returns a judgement
+        call_model: Function that takes prompts and an optional intervention, and returns answers
+        intervention: Optional intervention to apply
 
-    `judge` should take a row of the dataset, and return a judgement.
-
-    `call_model` should take a pd.Series of prompts and an optional intervention, and return an answer.
+    Returns:
+        DataFrame with columns "Judgement" and "Percentage"
     """
-
     print("Getting default judgements")
     judgements_default = dataset.assign(
         answer=lambda df: call_model(df.default_prompt),
@@ -125,139 +128,61 @@ def get_all_judgements(
     return pd.concat([judgements_default, judgements_lying, judgements_intervened])
 
 
-# %%
-next_token = util.vectorize(util.next_token_str, out_type="series")
-next_logits = util.vectorize(util.next_logits, out_type="tensor")
-continue_text = util.vectorize(util.continue_text, out_type="series", pbar=True)
+def add_missing_judgement_rows(
+    df: pd.DataFrame, judgements: Tuple[str, ...] = ("correct", "incorrect", "unclear")
+) -> pd.DataFrame:
+    """
+    Add missing rows to ensure all combinations of (coef, layer, judgement) exist.
+    
+    Args:
+        df: DataFrame with columns "coeff", "layer", "Judgement", and "Percentage"
+        judgements: Tuple of possible judgement values
+        
+    Returns:
+        DataFrame with all combinations of (coeff, layer, judgement)
+    """
+    complete_df = df.copy()
+    index = df.set_index(["coeff", "layer", "Judgement"]).index
+
+    for coef, layer, judgement in itertools.product(df.coeff.unique(), df.layer.unique(), judgements):
+        # Check if this combination exists in df
+        if (coef, layer, judgement) not in index:
+            # If not found, add a row with 0 values
+            complete_df = util.append(
+                complete_df,
+                {
+                    "coeff": coef,
+                    "layer": layer,
+                    "Judgement": judgement,
+                    "Percentage": 0.0,
+                },
+            )
+
+    return complete_df
 
 
-# %% [markdown]
-# ## Data 
-# 
-# We have 2 datasets of multiple-choice questions, "easy" (should be doable by 5-year-olds) and "hard" (should be doable by 12-year-olds).
-# 
-# For each dataset, we prepare the data as follows:
-# 
-# 1. Given a correct and an incorrect answer, we randomly choose one as "first answer" and one as "second answer"
-# 2. We construct 2 prompts: a "default prompt" where we ask the model to choose a multiple choice answer, and a 
-#    "lying prompt" where we explicitly ask it to lie.
-# 3. We split the dataset into 75% train and 25% test
-
-# %%
-easy_mcq = create_mcq_dataset("mcq_5_yo.json", rng=rng)
-hard_mcq = create_mcq_dataset("mcq_12_yo.json", rng=rng)
-easy_train, easy_test = train_test_split(easy_mcq, train_fraction=0.75)
-hard_train, hard_test = train_test_split(hard_mcq, train_fraction=0.75)
-
-# %% [markdown]
-# # Can the model even lie?
-# 
-# Before we proceed with interventions, we must first demonstrate that our chosen model (Gemma-2-2b-instruct) is capable of lying, and that our prompt elicits this behaviour successfully.
-# 
-# We demonstate this by running our 2 prompts through the model and checking whether it tells the truth (given the default prompt) and lies (given the lying prompt).
-
-# %%
-easy_judgements = get_all_judgements(
-    dataset=easy_mcq,
-    judge=judge_simple,
-    call_model=partial(next_token, model=gemma_2_2b_it),
-)
-
-sns.catplot(
-    data=aggregate_judgements(easy_judgements),
-    x="Judgement",
-    y="Percentage",
-    col="Prompt",
-    kind="bar",
-    height=5,
-    aspect=0.8,
-)
-
-plt.savefig(util.plots_dir / "mcq_easy_judgements.jpg")
-
-# %% [markdown]
-# As can be seen, the model is perfectly capable of lying, when prompted to do so.
-
-# %% [markdown]
-# # Extracting Lying Behaviour as Function Vector
-
-# %%
-interventions_train = util.ResidualStreamIntervention.batch_learn(
-    model=gemma_2_2b_it,
-    pos_prompts=hard_mcq.lying_prompt,
-    neg_prompts=hard_mcq.default_prompt,
-    layers=range(gemma_2_2b_it.config.num_hidden_layers),
-    magnitudes=range(-3, 9),
-)
-
-# %% [markdown]
-# `function_vecs` contains a vector for each hidden layer in our model. In order to calculate which layer is the best to intervene on, we will calculate the mean difference between the incorrect token's logit and the correct token's logit.
-
-# %% [markdown]
-# # Evaluating Function Vector Performance
-
-# %% [markdown]
-# ## Do these Function Vectors even make sense?
-
-# %% [markdown]
-# One way to evaluate this question is to look at, for each layer, how easily separable the activations are between lying and honest.
-
-# %%
-get_activations = util.vectorize(util.last_token_residual_stream, out_type="tensor")
-
-lying_vectors = get_activations(easy_mcq.lying_prompt, model=gemma_2_2b_it).cpu().numpy()
-honest_vectors = get_activations(easy_mcq.default_prompt, model=gemma_2_2b_it).cpu().numpy()
-
-
-activations = np.vstack((lying_vectors, honest_vectors)).squeeze()
-
-# Calculate PCA coordinates for each layer
-n_layers = gemma_2_2b_it.config.num_hidden_layers
-n_samples = len(easy_mcq)
-pcas = [
-    PCA(n_components=2).fit_transform(activations[:, layer, :])
-    for layer in tqdm(range(n_layers), desc="Layers (for PCA)")
-]
-
-pca_coords = pd.DataFrame(
-    [
-        {
-            "Prompt Type": prompt_type,
-            "Sample": sample_idx,
-            "Coord 1": layer_pca[offset + sample_idx, 0],
-            "Coord 2": layer_pca[offset + sample_idx, 1],
-            "Layer": layer,
-        }
-        for layer, layer_pca in enumerate(pcas)
-        for prompt_type, offset in [("Lying", 0), ("Default", n_samples)]
-        for sample_idx in range(n_samples)
-    ]
-)
-
-# Create faceted scatter plot
-g = sns.relplot(
-    data=pca_coords,
-    x="Coord 1",
-    y="Coord 2",
-    hue="Prompt Type",
-    col="Layer",
-    col_wrap=5,  # Number of columns
-    alpha=0.7,
-    kind="scatter",
-    height=3,  # Height of each subplot
-)
-
-plt.savefig(util.plots_dir / "mcq_easy_pca.jpg")
-
-# %% [markdown]
-# ## Using Logit Difference
-
-# %%
-import nnsight
-def get_logit_diffs(model: nnsight.LanguageModel, dataset: pd.DataFrame, trained_interventions: dict[tuple[int, int], util.Intervention], intervention_coeff: int) -> t.Tensor:
+def get_logit_diffs(
+    model: LanguageModel, 
+    dataset: pd.DataFrame, 
+    trained_interventions: Dict[Tuple[int, int], util.Intervention], 
+    intervention_coeff: int
+) -> t.Tensor:
+    """
+    Calculate the mean difference between incorrect and correct token logits for each layer.
+    
+    Args:
+        model: The language model to use
+        dataset: DataFrame with the dataset to use
+        trained_interventions: Dictionary of interventions indexed by (layer, coefficient)
+        intervention_coeff: Coefficient value to use for interventions
+        
+    Returns:
+        Tensor with logit differences for each layer
+    """
     logit_diffs = t.zeros(model.config.num_hidden_layers)
 
-    assert model.config.num_hidden_layers == len(set(layer for layer, coeff in trained_interventions.keys())), "Number of trained layers does not match model's number of layers, possibly incompatible model"
+    assert model.config.num_hidden_layers == len(set(layer for layer, coeff in trained_interventions.keys())), \
+        "Number of trained layers does not match model's number of layers, possibly incompatible model"
 
     correct_token_ids = t.tensor(
         [
@@ -290,323 +215,470 @@ def get_logit_diffs(model: nnsight.LanguageModel, dataset: pd.DataFrame, trained
 
     return logit_diffs
 
-# %%
-logit_diffs_2b = get_logit_diffs(gemma_2_2b_it, easy_train, interventions_train, 1)
 
-df = pd.DataFrame(
-    {"Layer": range(logit_diffs_2b.shape[0]), "Logit Difference": logit_diffs_2b}
-)
-sns.lineplot(data=df, x="Layer", y="Logit Difference")
-plt.title("Logit Difference by Layer")
-plt.savefig(util.plots_dir / "mcq_easy_logit_diffs.jpg")
-
-# %%
-interventions_9b = util.ResidualStreamIntervention.batch_learn(
-    model=gemma_2_9b_it,
-    pos_prompts=easy_train.lying_prompt,
-    neg_prompts=easy_train.default_prompt,
-    layers=range(gemma_2_9b_it.config.num_hidden_layers),
-    magnitudes=range(-3, 9),
-)
-# %%
-logit_diffs_9b = get_logit_diffs(gemma_2_9b_it, easy_train, interventions_9b, 1)
-# %%
-df = pd.DataFrame(
-    {"Layer": range(logit_diffs_9b.shape[0]), "Logit Difference": logit_diffs_9b}
-)
-
-sns.lineplot(data=df, x="Layer", y="Logit Difference")
-plt.title("Logit Difference by Layer")
-plt.savefig(util.plots_dir / "mcq_easy_logit_diffs.jpg")
+def visualize_logit_diffs(
+    logit_diffs: t.Tensor, 
+    model_name: str,
+    save_path: Optional[str] = None
+) -> None:
+    """
+    Visualize logit differences across layers.
+    
+    Args:
+        logit_diffs: Tensor with logit differences
+        model_name: Name of the model for the plot title
+        save_path: Optional path to save the plot
+    """
+    df = pd.DataFrame(
+        {"Layer": range(logit_diffs.shape[0]), "Logit Difference": logit_diffs.cpu().numpy()}
+    )
+    
+    plt.figure(figsize=(10, 6))
+    sns.lineplot(data=df, x="Layer", y="Logit Difference")
+    plt.title(f"Logit Difference by Layer - {model_name}")
+    
+    if save_path:
+        plt.savefig(save_path)
+    
+    plt.close()
 
 
-# %% [markdown]
-# I have the feeling that this plot isn't telling us the whole story. Let's look a bit deeper, and investigate accuracies.
+def analyze_lying_accuracies(
+    model: LanguageModel,
+    test_dataset: pd.DataFrame,
+    interventions: Dict[Tuple[int, int], util.Intervention],
+    model_name: str,
+    save_path: Optional[str] = None
+) -> pd.DataFrame:
+    """
+    Analyze lying accuracies across layers and coefficients.
+    
+    Args:
+        model: The language model to use
+        test_dataset: DataFrame with the test dataset
+        interventions: Dictionary of interventions indexed by (layer, coefficient)
+        model_name: Name of the model for the plot
+        save_path: Optional path to save the plot
+        
+    Returns:
+        DataFrame with lying accuracies
+    """
+    lying_accuracies = []
 
-# %% [markdown]
-# ## Using Accuracy across Layers and Magnitudes
+    for layer in tqdm(range(model.config.num_hidden_layers), desc=f"{model_name} Layers"):
+        for coeff in tqdm(range(-3, 9), desc=f"Coeffs for layer {layer}"):
+            judgements_intervened = test_dataset.assign(
+                answer=lambda df: next_token(
+                    df.default_prompt,
+                    model=model,
+                    intervention=interventions[layer, coeff],
+                ),
+                Judgement=lambda df: df.apply(judge_simple, axis=1),
+                Prompt="Default w/ Intervention",
+            )
+            intervention_stats = aggregate_judgements(judgements_intervened)
+            lying_accuracies.append(intervention_stats.assign(coeff=coeff, layer=layer))
 
-# %%
-lying_accuracies = []
+    lying_accuracies_df = pd.concat(lying_accuracies, ignore_index=True)
+    lying_accuracies_df = add_missing_judgement_rows(lying_accuracies_df)
+    
+    if save_path:
+        visualize_lying_accuracies(lying_accuracies_df, model.config.num_hidden_layers, model_name, save_path)
+    
+    return lying_accuracies_df
 
-for layer in tqdm(range(gemma_2_2b_it.config.num_hidden_layers), desc="Layers"):
-    for coeff in tqdm(range(-3, 9), desc=f"Coeffs for layer {layer}"):
-        judgements_intervened = easy_test.assign(
+
+def visualize_lying_accuracies(
+    lying_accuracies_df: pd.DataFrame,
+    num_layers: int,
+    model_name: str,
+    save_path: Optional[str] = None
+) -> None:
+    """
+    Visualize lying accuracies across layers and coefficients.
+    
+    Args:
+        lying_accuracies_df: DataFrame with lying accuracies
+        num_layers: Number of layers in the model
+        model_name: Name of the model for the plot
+        save_path: Optional path to save the plot
+    """
+    n_cols = 5
+    n_rows = (num_layers + n_cols - 1) // n_cols
+
+    colours = {
+        "correct": "#2E86C1",  # trustworthy blue
+        "incorrect": "#E74C3C",  # warning red
+        "unclear": "#95A5A6",  # neutral gray
+    }
+
+    g = sns.relplot(
+        data=lying_accuracies_df,
+        x="coeff",
+        y="Percentage",
+        hue="Judgement",
+        col="layer",
+        col_wrap=n_cols,  # Number of columns
+        palette=colours,
+        kind="line",
+        height=3,  # Height of each subplot
+        alpha=0.7,
+        linewidth=2.5,
+        facet_kws={"sharey": True, "sharex": True}
+    )
+
+    # Customize the appearance
+    g.set_titles(f"{model_name} Layer {{col_name}}", size=10)
+    g.set_axis_labels("Coefficient", "Percentage")
+
+    if save_path:
+        plt.savefig(save_path)
+    
+    plt.close()
+
+
+def visualize_pca(
+    model: LanguageModel,
+    dataset: pd.DataFrame,
+    model_name: str,
+    save_path: Optional[str] = None
+) -> None:
+    """
+    Visualize PCA of lying vs honest activations for each layer.
+    
+    Args:
+        model: The language model to use
+        dataset: DataFrame with the dataset to use
+        model_name: Name of the model for the plot
+        save_path: Optional path to save the plot
+    """
+    get_activations = util.vectorize(util.last_token_residual_stream, out_type="tensor")
+
+    lying_vectors = get_activations(dataset.lying_prompt, model=model).cpu().numpy()
+    honest_vectors = get_activations(dataset.default_prompt, model=model).cpu().numpy()
+
+    activations = np.vstack((lying_vectors, honest_vectors)).squeeze()
+
+    # Calculate PCA coordinates for each layer
+    n_layers = model.config.num_hidden_layers
+    n_samples = len(dataset)
+    pcas = [
+        PCA(n_components=2).fit_transform(activations[:, layer, :])
+        for layer in tqdm(range(n_layers), desc=f"{model_name} Layers (for PCA)")
+    ]
+
+    pca_coords = pd.DataFrame(
+        [
+            {
+                "Prompt Type": prompt_type,
+                "Sample": sample_idx,
+                "Coord 1": layer_pca[offset + sample_idx, 0],
+                "Coord 2": layer_pca[offset + sample_idx, 1],
+                "Layer": layer,
+            }
+            for layer, layer_pca in enumerate(pcas)
+            for prompt_type, offset in [("Lying", 0), ("Default", n_samples)]
+            for sample_idx in range(n_samples)
+        ]
+    )
+
+    # Create faceted scatter plot
+    g = sns.relplot(
+        data=pca_coords,
+        x="Coord 1",
+        y="Coord 2",
+        hue="Prompt Type",
+        col="Layer",
+        col_wrap=5,  # Number of columns
+        alpha=0.7,
+        kind="scatter",
+        height=3,  # Height of each subplot
+    )
+    
+    g.fig.suptitle(f"{model_name} - PCA of Lying vs Honest Activations", y=1.02)
+
+    if save_path:
+        plt.savefig(save_path)
+    
+    plt.close()
+
+
+def investigate_model_generalization(
+    model: LanguageModel,
+    interventions: Dict[Tuple[int, int], util.Intervention],
+    model_name: str
+) -> None:
+    """
+    Investigate how well interventions generalize to different datasets.
+    
+    Args:
+        model: The language model to use
+        interventions: Dictionary of interventions indexed by (layer, coefficient)
+        model_name: Name of the model for plots
+    """
+    # Test with 1 and 2 as options instead of A and B
+    layer = 13
+    magnitude = 2
+
+    easy_mcq_1_2 = create_mcq_dataset("mcq_5_yo.json", rng=rng, option_names=("1", "2"))
+
+    judgements_1_2 = get_all_judgements(
+        easy_mcq_1_2,
+        intervention=interventions[layer, magnitude],
+        judge=judge_simple,
+        call_model=partial(next_token, model=model),
+    )
+
+    sns.catplot(
+        data=aggregate_judgements(judgements_1_2),
+        x="Judgement",
+        y="Percentage",
+        col="Prompt",
+        kind="bar",
+        height=5,
+        aspect=0.8,
+    )
+    plt.suptitle(f"{model_name} - 1 & 2 Dataset", y=1.02)
+    plt.savefig(util.plots_dir / f"{model_name.lower()}_mcq_1_2_dataset.jpg")
+    plt.close()
+
+    # Analyze accuracy with varying coefficients
+    lying_accuracies_1_2 = []
+    layer = 14
+
+    for coeff in tqdm(range(-3, 9), desc=f"{model_name} - Testing 1-2 dataset"):
+        judgements_intervened = easy_mcq_1_2.assign(
             answer=lambda df: next_token(
-                df.default_prompt,
-                model=gemma_2_2b_it,
-                intervention=interventions_train[layer, coeff],
+                df.default_prompt, model=model, intervention=interventions[layer, coeff]
             ),
             Judgement=lambda df: df.apply(judge_simple, axis=1),
             Prompt="Default w/ Intervention",
         )
         intervention_stats = aggregate_judgements(judgements_intervened)
-        lying_accuracies.append(intervention_stats.assign(coeff=coeff, layer=layer))
+        lying_accuracies_1_2.append(
+            intervention_stats.assign(coeff=coeff, layer=layer)
+        )
 
-lying_accuracies = pd.concat(lying_accuracies, ignore_index=True)
+    lying_accuracies_df_1_2 = pd.concat(lying_accuracies_1_2, ignore_index=True)
+    lying_accuracies_df_1_2 = add_missing_judgement_rows(lying_accuracies_df_1_2)
+    
+    # Create single plot
+    plt.figure(figsize=(10, 6))
 
+    colours = {
+        "correct": "#2E86C1",  # trustworthy blue
+        "incorrect": "#E74C3C",  # warning red
+        "unclear": "#95A5A6",  # neutral gray
+    }
 
-# %%
-def add_missing_judgement_rows(
-    df: pd.DataFrame, judgements: tuple[str] = ("correct", "incorrect", "unclear")
-) -> pd.DataFrame:
-    """
-    Add missing rows to ensure all combinations of (coef, layer, judgement) exist.
-    """
-    complete_df = df.copy()
-    index = df.set_index(["coeff", "layer", "Judgement"]).index
+    sns.lineplot(
+        data=lying_accuracies_df_1_2,
+        x="coeff",
+        y="Percentage",
+        hue="Judgement",
+        palette=colours,
+        markers=False,
+    )
 
-    for coef, layer, judgement in itertools.product(df.coeff.unique(), df.layer.unique(), judgements):
-        # Check if this combination exists in df
-        if (coef, layer, judgement) not in index:
-            # If not found, add a row with 0 values
-            complete_df = util.append(
-                complete_df,
-                {
-                    "coeff": coef,
-                    "layer": layer,
-                    "Judgement": judgement,
-                    "Percentage": 0.0,
-                },
-            )
-
-    return complete_df
-
-
-# Update the lying_accuracies with complete data
-lying_accuracies = add_missing_judgement_rows(lying_accuracies)
-
-n_cols = 5
-n_rows = (gemma_2_2b_it.config.num_hidden_layers + n_cols - 1) // n_cols
-
-colours = {
-    "correct": "#2E86C1",  # trustworthy blue
-    "incorrect": "#E74C3C",  # warning red
-    "unclear": "#95A5A6",  # neutral gray
-}
-
-g = sns.relplot(
-    data=lying_accuracies,
-    x="coeff",
-    y="Percentage",
-    hue="Judgement",
-    col="layer",
-    col_wrap=5,  # Number of columns
-    palette=colours,
-    kind="line",
-    height=3,  # Height of each subplot
-    alpha=0.7,
-    linewidth=2.5,
-    facet_kws={"sharey": True, "sharex": True}
-)
-
-# Customize the appearance
-g.set_titles("Layer {col_name}", size=10)
-g.set_axis_labels("Coefficient", "Percentage")
-
-plt.savefig(util.plots_dir / "mcq_easy_lying_accuracies.jpg")
-
-
-# %% [markdown]
-# As you can see in the plot above, for early layers the intervention makes little difference. 
-# 
-# For layers 13-15, we see that the % of incorrect answers rises dramatically at a coefficient of between 1 and 2.5, but then if the coefficient continues to increase the incorrect answers are replaced with unclear answers (i.e. answers that are neither the correct nor the incorrect choice). It will be interesting to investigate these unclear answers further: are they garbage, or is the model answering the question, just not using the right format? If so, is it answering correctly or incorrectly?
-# 
-# For layers 16-20, the intervention never succeeds in getting the model to lie, but at a high enough coefficient the model outputs unclear answers.
-# 
-# Finally for layers 21-24, the intervention seems to shift incorrect and correct answers to a fixed number. My guess is that the model is simply giving the same answer for all questions. This would also explain why setting the coefficient negative gives us the reversed proportions of correct and incorrect.
-
-# %% [markdown]
-# # Going a little deeper
-
-# %% [markdown]
-# 
-# 
-# There are 3 things I want to investigate deeper:
-# 
-# 1. What's happening with large coefficients for layers 13, 14 and 15? Let's investigate these by manually inspecting a few of the answers given by the model
-# 2. What's happening with large (and large negative) coefficients for the last few layers?
-# 3. Does this lying vector generalise? Let's try a few different datasets:
-#    1. What if instead of A and B, we use 1 and 2?
-#    2. What if we try using the same function vector for true/false questions?
-#    3. What about vice versa, i.e. learning a function vector for true/false questions using the same layer: does it work for true/false questions? Does it work for MCQ?
-#    4. What if we try using a different dataset, i.e. the hard MCQ dataset? Can our model even reliably answer those questions?
-
-# %%
-interventions = util.ResidualStreamIntervention.batch_learn(
-    model=gemma_2_2b_it,
-    pos_prompts=easy_train.lying_prompt,
-    neg_prompts=easy_train.default_prompt,
-    layers=range(gemma_2_2b_it.config.num_hidden_layers),
-    magnitudes=range(-3, 9),
-)
-
-# %% [markdown]
-# ## Investigating middle layers and large coefficients
-
-# %%
-layer = 13
-magnitude = 8
-completions = util.batch_continue_text(
-    easy_test.default_prompt, model=gemma_2_2b_it, intervention=interventions[layer, magnitude]
-)
-completions = pd.Series(completions, index=easy_test.index)
-
-easy_test.assign(answer=completions)[["question", "choices_str", "answer"]]
-
-# %% [markdown]
-# It seems like the model is not lying when we crank up the coefficient on layer 13, but it answers either "..." or "that's a trick question!" for almost all questions.
-# 
-# "That's a trick question" is interesting, and it suggests perhaps the model thinks there is deception going on, even if it's not lying itself.
-
-# %% [markdown]
-# ## Investigating later layers and large coefficients
-
-# %%
-layer = 23
-for coeff in [8, -3]:
-    answers = next_token(
-        easy_train.default_prompt, model=gemma_2_2b_it, intervention=interventions[layer, coeff]
-    ).value_counts()
-    print(f"Layer {layer}, Coeff {coeff}:")
-    print(", ".join(f"{k}: {v}" for k, v in answers.items()))
-
-
-# %% [markdown]
-# Yep. As expected, at layer 24, pushing the vector just results in either A or B (more or less).
-# 
-# For some reason, at negative coefficients in the later layres, the model starts saying "Geplaatst" which is Dutch for "placed".
-
-# %% [markdown]
-# ## Investigating Generalization
-
-# %% [markdown]
-# ### Step 1: Different multiple-choice markers
-
-# %%
-layer = 13
-magnitude = 2
-
-easy_mcq_1_2 = create_mcq_dataset("mcq_5_yo.json", rng=rng, option_names=("1", "2"))
-
-judgements_1_2 = get_all_judgements(
-    easy_mcq_1_2,
-    intervention=interventions[layer, magnitude],
-    judge=judge_simple,
-    call_model=partial(next_token, model=gemma_2_2b_it),
-)
-
-
-sns.catplot(
-    data=aggregate_judgements(judgements_1_2),
-    x="Judgement",
-    y="Percentage",
-    col="Prompt",
-    kind="bar",
-    height=5,
-    aspect=0.8,
-)
-
-plt.savefig(util.plots_dir / "mcq_1_2_dataset.jpg")
-
-# %%
-lying_accuracies_1_2 = []
-
-layer = 14
-
-for coeff in tqdm(range(-3, 9)):
-    judgements_intervened = easy_mcq_1_2.assign(
-        answer=lambda df: next_token(
-            df.default_prompt, model=gemma_2_2b_it, intervention=interventions[layer, coeff]
+    plt.title(f"{model_name} - 1 & 2 Dataset, Layer {layer}", fontsize=12)
+    plt.xlabel("Coefficient")
+    plt.ylabel("Percentage")
+    plt.grid(True, alpha=0.3)
+    plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+    plt.savefig(util.plots_dir / f"{model_name.lower()}_mcq_1_2_lying_accuracies.jpg")
+    plt.close()
+    
+    # Test with true/false dataset
+    tf_dataset_cot = create_tf_statements_dataset_cot("tf_statements.json")
+    tf_dataset_simple = create_tf_statements_dataset_simple("tf_statements.json")
+    
+    tf_cot_sample = tf_dataset_cot.sample(30)
+    
+    layer = 13
+    magnitude = 2
+    judgements_tf_cot = get_all_judgements(
+        tf_cot_sample,
+        intervention=interventions[layer, magnitude],
+        judge=judge_with_answer_tags,
+        call_model=partial(
+            continue_text, model=model, max_new_tokens=200, intervention_pos="all_tokens"
         ),
-        Judgement=lambda df: df.apply(judge_simple, axis=1),
-        Prompt="Default w/ Intervention",
-    )
-    intervention_stats = aggregate_judgements(judgements_intervened)
-    lying_accuracies_1_2.append(
-        intervention_stats.assign(coeff=coeff, layer=intervention.layer)
     )
 
-lying_accuracies_df_1_2 = pd.concat(lying_accuracies_1_2, ignore_index=True)
-lying_accuracies_df_1_2 = add_missing_judgement_rows(lying_accuracies_df_1_2)
-# Create single plot
-plt.figure(figsize=(10, 6))
+    sns.catplot(
+        data=aggregate_judgements(judgements_tf_cot),
+        x="Judgement",
+        y="Percentage",
+        col="Prompt",
+        kind="bar",
+        height=5,
+        aspect=0.8,
+    )
+    plt.suptitle(f"{model_name} - True/False CoT Dataset", y=1.02)
+    plt.savefig(util.plots_dir / f"{model_name.lower()}_tf_cot_sample.jpg")
+    plt.close()
+    
+    judgements_tf_simple = get_all_judgements(
+        tf_dataset_simple,
+        intervention=interventions[(layer, magnitude)],
+        judge=judge_simple,
+        call_model=partial(next_token, model=model),
+    )
 
-sns.lineplot(
-    data=lying_accuracies_df_1_2,
-    x="coeff",
-    y="Percentage",
-    hue="Judgement",
-    palette=colours,
-    markers=False,
-)
+    sns.catplot(
+        data=aggregate_judgements(judgements_tf_simple),
+        x="Judgement",
+        y="Percentage",
+        col="Prompt",
+        kind="bar",
+        height=5,
+        aspect=0.8,
+    )
+    plt.suptitle(f"{model_name} - True/False Simple Dataset", y=1.02)
+    plt.savefig(util.plots_dir / f"{model_name.lower()}_tf_simple.jpg")
+    plt.close()
 
-plt.title(f"1 & 2 Dataset, Layer {layer}", fontsize=12)
-plt.xlabel("Coefficient")
-plt.ylabel("Percentage")
-plt.grid(True, alpha=0.3)
-plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
 
-plt.savefig(util.plots_dir / "mcq_1_2_lying_accuracies.jpg")
+def analyze_model(
+    model: LanguageModel,
+    model_name: str,
+    easy_mcq: pd.DataFrame,
+    easy_train: pd.DataFrame,
+    easy_test: pd.DataFrame,
+    hard_mcq: pd.DataFrame,
+    hard_train: pd.DataFrame
+) -> None:
+    """
+    Run all analyses for a specific model.
+    
+    Args:
+        model: The language model to analyze
+        model_name: Name of the model for plots
+        easy_mcq: Easy MCQ dataset
+        easy_train: Easy MCQ training set
+        easy_test: Easy MCQ test set
+        hard_mcq: Hard MCQ dataset
+        hard_train: Hard MCQ training set
+    """
+    print(f"\n\n===== Analyzing {model_name} =====\n")
+    
+    # 1. Test if the model can lie
+    print("Testing if the model can lie")
+    easy_judgements = get_all_judgements(
+        dataset=easy_mcq,
+        judge=judge_simple,
+        call_model=partial(next_token, model=model),
+    )
+
+    sns.catplot(
+        data=aggregate_judgements(easy_judgements),
+        x="Judgement",
+        y="Percentage",
+        col="Prompt",
+        kind="bar",
+        height=5,
+        aspect=0.8,
+    )
+    plt.suptitle(f"{model_name} - Can the model lie?", y=1.02)
+    plt.savefig(util.plots_dir / f"{model_name.lower()}_mcq_easy_judgements.jpg")
+    plt.close()
+    
+    # 2. Extract lying behavior as function vector
+    print("Extracting lying behavior as function vector")
+    interventions = util.ResidualStreamIntervention.batch_learn(
+        model=model,
+        pos_prompts=hard_train.lying_prompt,
+        neg_prompts=hard_train.default_prompt,
+        layers=range(model.config.num_hidden_layers),
+        magnitudes=range(-3, 9),
+    )
+    
+    # 3. Visualize PCA for function vectors
+    print("Visualizing PCA for function vectors")
+    visualize_pca(
+        model=model,
+        dataset=easy_mcq,
+        model_name=model_name,
+        save_path=util.plots_dir / f"{model_name.lower()}_mcq_easy_pca.jpg"
+    )
+    
+    # 4. Calculate and visualize logit differences
+    print("Calculating logit differences")
+    logit_diffs = get_logit_diffs(model, easy_train, interventions, 1)
+    visualize_logit_diffs(
+        logit_diffs=logit_diffs,
+        model_name=model_name,
+        save_path=util.plots_dir / f"{model_name.lower()}_mcq_easy_logit_diffs.jpg"
+    )
+    
+    # 5. Analyze lying accuracies across layers and magnitudes
+    print("Analyzing lying accuracies")
+    analyze_lying_accuracies(
+        model=model,
+        test_dataset=easy_test,
+        interventions=interventions,
+        model_name=model_name,
+        save_path=util.plots_dir / f"{model_name.lower()}_mcq_easy_lying_accuracies.jpg"
+    )
+    
+    # 6. Investigate generalization
+    print("Investigating generalization")
+    investigate_model_generalization(
+        model=model,
+        interventions=interventions,
+        model_name=model_name
+    )
+
 
 # %% [markdown]
-# It works! It generalises, at least somewhat, to 1 & 2.
+# ## Vectorized functions
+
+# %%
+next_token = util.vectorize(util.next_token_str, out_type="series")
+next_logits = util.vectorize(util.next_logits, out_type="tensor")
+continue_text = util.vectorize(util.continue_text, out_type="series", pbar=True)
+
 
 # %% [markdown]
-# ### Step 2: True-False Dataset
+# ## Data preparation
 
 # %%
-tf_dataset_cot = create_tf_statements_dataset_cot("tf_statements.json")
-tf_dataset_simple = create_tf_statements_dataset_simple("tf_statements.json")
+# Create datasets
+easy_mcq = create_mcq_dataset("mcq_5_yo.json", rng=rng)
+hard_mcq = create_mcq_dataset("mcq_12_yo.json", rng=rng)
+
+# Split into train and test
+easy_train, easy_test = train_test_split(easy_mcq, train_fraction=0.75)
+hard_train, hard_test = train_test_split(hard_mcq, train_fraction=0.75)
+
+
+# %% [markdown]
+# # Main Analysis
 
 # %%
-tf_cot_sample = tf_dataset_cot.sample(30)
+# Run analyses for Gemma-2-2b model
+analyze_model(
+    model=gemma_2_2b_it,
+    model_name="Gemma-2-2b",
+    easy_mcq=easy_mcq,
+    easy_train=easy_train,
+    easy_test=easy_test,
+    hard_mcq=hard_mcq,
+    hard_train=hard_train
+)
+
+# Run analyses for Gemma-2-9b model
+analyze_model(
+    model=gemma_2_9b_it,
+    model_name="Gemma-2-9b",
+    easy_mcq=easy_mcq,
+    easy_train=easy_train,
+    easy_test=easy_test,
+    hard_mcq=hard_mcq,
+    hard_train=hard_train
+)
+
+
+
 
 # %%
-layer = 13
-magnitude = 2
-judgements_tf_cot = get_all_judgements(
-    tf_cot_sample,
-    intervention=interventions[layer, magnitude],
-    judge=judge_with_answer_tags,
-    call_model=partial(
-        continue_text, model=gemma_2_2b_it, max_new_tokens=200, intervention_pos="all_tokens"
-    ),
-)
-
-sns.catplot(
-    data=aggregate_judgements(judgements_tf_cot),
-    x="Judgement",
-    y="Percentage",
-    col="Prompt",
-    kind="bar",
-    height=5,
-    aspect=0.8,
-)
-
-plt.savefig(util.plots_dir / "tf_cot_sample.jpg")
-
-# %%
-layer = 13
-magnitude = 2
-
-judgements_tf_simple = get_all_judgements(
-    tf_dataset_simple,
-    intervention=interventions[(layer, magnitude)],
-    judge=judge_simple,
-    call_model=partial(next_token, model=gemma_2_2b_it),
-)
-
-sns.catplot(
-    data=aggregate_judgements(judgements_tf_simple),
-    x="Judgement",
-    y="Percentage",
-    col="Prompt",
-    kind="bar",
-    height=5,
-    aspect=0.8,
-)
-
-plt.savefig(util.plots_dir / "tf_simple.jpg")
-
-
