@@ -1,13 +1,16 @@
+apt update
+apt install -y curl
+apt install -y git
+
 if [ ! -d .git ]; then
     git clone https://github.com/Arrrlex/arena4-capstone.git
     cd arena4-capstone
 fi
 
 
-apt update
-apt install -y curl
+
 curl -LsSf https://astral.sh/uv/install.sh | sh
-source ~/.bashrc && uv python install 3.12
+source ~/.bashrc
 
 source $HOME/.local/bin/env
-uv sync
+UV_PYTHON_INSTALL_DIR=./uv_python/ uv sync
