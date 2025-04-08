@@ -4,6 +4,8 @@ Authors: Gergely Kiss, Tinuade Margaret, Alex McKenzie
 
 ## Introduction
 
+The [ARENA](https://www.arena.education/) program ends in a Capstone project where we chose to experiment with lying vectors, using the models Gemma-2-2B and Gemma-2-9B. Our goal was to get some practice by 
+
 It's important to understand when a model is lying to us. If a model is lying, it's likely to be giving us incorrect information, even when it knows the truth. A model that's capable of lying might be capable of other deceptive behaviours, such as sandbagging and withholding information. Lying is different to being incorrect: if the model says something false because it's under- or mis-informed, we can probably fix it by giving it more information, but that's not clearly the case if the model is deliberately lying.
 
 If we could robustly detect when a model is lying, it could be an important component of an online monitoring system.
