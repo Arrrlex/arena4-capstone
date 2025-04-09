@@ -114,7 +114,7 @@ class ResidualStreamIntervention(Intervention):
         )
 
     @classmethod
-    def batch_learn(cls, model, pos_prompts, neg_prompts, layers, magnitudes):
+    def batch_learn(cls, model, pos_prompts, neg_prompts, layers, magnitudes) -> dict[tuple[int, float], "ResidualStreamIntervention"]:
         get_residuals = vectorize(last_token_residual_stream, out_type="tensor")
         pos_vectors = get_residuals(pos_prompts, model=model).mean(0)
         neg_vectors = get_residuals(neg_prompts, model=model).mean(0)

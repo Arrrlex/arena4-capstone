@@ -7,6 +7,8 @@
 # %%
 import os
 os.environ["nnUNet_compile"] = "F"
+os.environ["TORCH_COMPILE"] = "0"  # Disable compilation globally
+os.environ["TORCHDYNAMO_DISABLE"] = "1"  # Disable Dynamo completely
 
 import arena4_capstone.util as util
 from arena4_capstone.models import gemma_2_2b_it, gemma_2_9b_it
@@ -29,6 +31,10 @@ import re
 from typing import Callable, Dict, List, Optional, Tuple, Union
 from functools import partial
 import itertools
+
+# %% 
+# Enable interactive mode for matplotlib to display plots in the notebook
+plt.ion()
 
 # %%
 rng = np.random.RandomState(42)
@@ -240,7 +246,8 @@ def visualize_logit_diffs(
     if save_path:
         plt.savefig(save_path)
     
-    plt.close()
+    # Display the plot in the notebook instead of closing it
+    plt.show()
 
 
 def analyze_lying_accuracies(
@@ -334,7 +341,8 @@ def visualize_lying_accuracies(
     if save_path:
         plt.savefig(save_path)
     
-    plt.close()
+    # Display the plot in the notebook instead of closing it
+    plt.show()
 
 
 def visualize_pca(
@@ -400,7 +408,8 @@ def visualize_pca(
     if save_path:
         plt.savefig(save_path)
     
-    plt.close()
+    # Display the plot in the notebook instead of closing it
+    plt.show()
 
 
 def investigate_model_generalization(
@@ -440,7 +449,7 @@ def investigate_model_generalization(
     )
     plt.suptitle(f"{model_name} - 1 & 2 Dataset", y=1.02)
     plt.savefig(util.plots_dir / f"{model_name.lower()}_mcq_1_2_dataset.jpg")
-    plt.close()
+    plt.show()  # Show the plot in notebook
 
     # Analyze accuracy with varying coefficients
     lying_accuracies_1_2 = []
@@ -486,7 +495,7 @@ def investigate_model_generalization(
     plt.grid(True, alpha=0.3)
     plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
     plt.savefig(util.plots_dir / f"{model_name.lower()}_mcq_1_2_lying_accuracies.jpg")
-    plt.close()
+    plt.show()  # Show the plot in notebook
     
     # Test with true/false dataset
     tf_dataset_cot = create_tf_statements_dataset_cot("tf_statements.json")
@@ -516,7 +525,7 @@ def investigate_model_generalization(
     )
     plt.suptitle(f"{model_name} - True/False CoT Dataset", y=1.02)
     plt.savefig(util.plots_dir / f"{model_name.lower()}_tf_cot_sample.jpg")
-    plt.close()
+    plt.show()  # Show the plot in notebook
     
     judgements_tf_simple = get_all_judgements(
         tf_dataset_simple,
@@ -536,7 +545,7 @@ def investigate_model_generalization(
     )
     plt.suptitle(f"{model_name} - True/False Simple Dataset", y=1.02)
     plt.savefig(util.plots_dir / f"{model_name.lower()}_tf_simple.jpg")
-    plt.close()
+    plt.show()  # Show the plot in notebook
 
 
 def analyze_model(
@@ -570,7 +579,8 @@ def analyze_model(
         call_model=partial(next_token, model=model),
     )
 
-    sns.catplot(
+    plt.figure(figsize=(12, 6))
+    g = sns.catplot(
         data=aggregate_judgements(easy_judgements),
         x="Judgement",
         y="Percentage",
@@ -581,7 +591,7 @@ def analyze_model(
     )
     plt.suptitle(f"{model_name} - Can the model lie?", y=1.02)
     plt.savefig(util.plots_dir / f"{model_name.lower()}_mcq_easy_judgements.jpg")
-    plt.close()
+    plt.show()  # Show the plot in notebook
     
     # 2. Extract lying behavior as function vector
     print("Extracting lying behavior as function vector")
@@ -677,8 +687,5 @@ analyze_model(
     hard_mcq=hard_mcq,
     hard_train=hard_train
 )
-
-
-
 
 # %%
