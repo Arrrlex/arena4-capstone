@@ -8,7 +8,7 @@ It's important to understand when a model is lying to us. If a model is lying, i
 
 If we could robustly detect when a model is lying, it could be an important component of an online monitoring system.
 
-For our ARENA capstone, we decided to use function vectors to investigate lying behaviour in models. 
+For our ARENA capstone, we decided to use function vectors to investigate lying behaviour in models.
 
 Is "lying" represented as a linear feature learned by our model? In other words, is it represented as a single direction in activation space?
 
@@ -26,7 +26,6 @@ Since we only had 4 days, we used the following setup:
 ### Can Gemma-2-2B even lie?
 
 Gemma-2-2b is (presumably) RLHF-ed not to lie, but it's very easy to get around that
-
 
 \centering
 ![](../imgs/lie_gemma_2_2b.png "Chat logs of Gemma-2-2b lying"){width=300}
@@ -56,6 +55,7 @@ Yes to both:
 (Insert bar plot)
 
 (The rest of this is simply copied from slides.md)
+
 # Investigating Hidden State Activations
 
 - Does it make sense to try to extract directions for lying?
@@ -67,8 +67,6 @@ Yes to both:
 
 (Insert PCA visualisation here)
 
-
-
 # Generation of Lying Vectors
 
 We split our "12-year-old multiple choice question" dataset into train & test (3:1).
@@ -76,6 +74,7 @@ We split our "12-year-old multiple choice question" dataset into train & test (3
 On the train split, we compute the activations at layer $\ell$ when prompted for honesty, and when prompted for dishonesty. Our "lying vector" is the average difference between the two.
 
 Why this method?
+
 - It's used in the Tegmark paper
 - We didn't have time to try anything else
 
@@ -112,7 +111,6 @@ Results with model-based scoring:
 
 (Line plot: one line "truth", one line "lie", one line "ambiguous" for layer 21 as coefficient varies)
 
-
 # So does intervening work?
 
 Yes! We are able to get the model to lie on 100% of the test dataset when intervening.
@@ -123,7 +121,6 @@ Here are a few examples:
 ![](../plots/pending.png){width=300}
 
 (Table showing question, answer without intervention, answer with intervention)
-
 
 # Does this lying direction generalise to other datasets?
 
